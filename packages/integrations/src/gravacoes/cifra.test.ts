@@ -23,13 +23,23 @@ const ler = async (s: ReadableStream<Uint8Array>) => {
   for (let r = await leitor.read(); !r.done; r = await leitor.read()) partes.push(r.value);
   return Buffer.concat(partes);
 };
-const emPedacos = (b: Uint8Array, tamanho: number) =>
+/** Fatia em pedaços de tamanho fixo ou, com uma lista, em ciclo (cortes fora do alinhamento sem milhares de pedaços). */
+const emPedacos = (b: Uint8Array, tamanho: number | readonly number[]) =>
   new ReadableStream<Uint8Array>({
     start(c) {
-      for (let o = 0; o < b.byteLength; o += tamanho) c.enqueue(b.subarray(o, o + tamanho));
+      const tamanhos = typeof tamanho === "number" ? [tamanho] : tamanho;
+      for (let o = 0, i = 0; o < b.byteLength; i += 1) {
+        const t = tamanhos[i % tamanhos.length]!;
+        c.enqueue(b.subarray(o, o + t));
+        o += t;
+      }
       c.close();
     },
   });
+// Rede picotada: 1 e 7 bytes cortam dentro do cabeçalho e da etiqueta de cada bloco; os primos grandes
+// deslocam o corte a cada volta. Antes eram pedaços fixos de 7 bytes (~37 mil por trecho): o teste levava
+// ~2 s e passava do limite de 5 s com a bateria em paralelo.
+const PICOTADO = [1, 7, 4093, 9973] as const;
 
 describe("cifra das gravações", () => {
   const original = randomBytes(3 * BLOCO + 1234);
@@ -64,7 +74,7 @@ describe("cifra das gravações", () => {
     const total = original.byteLength;
     for (const [inicio, fim] of [[0, 0], [0, total - 1], [BLOCO - 5, BLOCO + 5], [2 * BLOCO, 2 * BLOCO], [total - 10, total - 1], [100, 3 * BLOCO + 10]] as const) {
       const t = trechoCifrado(inicio, fim, total);
-      for (const pedaco of [7, 4096, 1 << 20]) {
+      for (const pedaco of [PICOTADO, 4096, 1 << 20]) {
         const parte = await ler(decifrarTrecho(emPedacos(cifrado.subarray(t.de, t.ate + 1), pedaco), chave, total, inicio, fim));
         expect(parte.equals(original.subarray(inicio, fim + 1))).toBe(true);
       }
