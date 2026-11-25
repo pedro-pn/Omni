@@ -6,6 +6,7 @@
 #   deploy/publicar.sh producao                # publica origin/master na produção
 #   deploy/publicar.sh producao <commit>       # publica um commit específico (ex.: voltar versão)
 #   deploy/publicar.sh producao --sem-backup   # só enquanto o backup automático não existir
+#   OMNI_DIR=~/apps/Omni sh /tmp/publicar.sh producao   # rodando de uma cópia do script
 #
 # Passos: confere a árvore limpa → backup do banco → guarda as imagens atuais → leva o código ao
 # commit pedido → build com a versão → migrations → web e worker → confere /api/saude (status ok e
@@ -31,7 +32,9 @@ case "$AMBIENTE" in
   *) echo "ambiente desconhecido: $AMBIENTE (use staging ou producao)" >&2; exit 2 ;;
 esac
 
-cd "$(dirname "$0")/.."
+# OMNI_DIR: pasta do repositório, para rodar o script de uma cópia (ex.: a primeira publicação,
+# quando a pasta ainda está num commit sem o script).
+cd "${OMNI_DIR:-$(dirname "$0")/..}"
 [ -f "$ENVFILE" ] || { echo "faltando $ENVFILE" >&2; exit 2; }
 PORTA="$(grep -E '^OMNI_WEB_PORT=' "$ENVFILE" | cut -d= -f2 || true)"
 PORTA="${PORTA:-$PORTA_PADRAO}"
