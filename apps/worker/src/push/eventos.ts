@@ -18,7 +18,7 @@ const CANAL = { interno: "Interno", gerencial: "Gerencial" } as const;
 export async function aoAviso(db: Db, enviar: Enviador, id: string) {
   const [n] = await db.select().from(schema.notifications).where(eq(schema.notifications.id, id));
   if (!n) return null;
-  const url = n.kind === "chamada_perdida" ? "/?chamadas=1" : n.kind === "risco" ? "/admin?aba=seguranca" : n.taskId ? `/?tarefa=${n.taskId}` : n.missionId ? `/?missao=${n.missionId}&aba=interno` : "/";
+  const url = n.kind === "chamada_perdida" ? "/?chamadas=1" : n.kind === "risco" ? "/admin?aba=seguranca" : n.kind === "erro_sistema" ? "/admin?aba=erros" : n.taskId ? `/?tarefa=${n.taskId}` : n.missionId ? `/?missao=${n.missionId}&aba=interno` : "/";
   return enviarPush(db, enviar, [n.personId], "aviso", { titulo: n.title, corpo: n.body || n.title, url, tag: n.missionId ? `missao-${n.missionId}-interno` : `aviso-${n.id}` });
 }
 

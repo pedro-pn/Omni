@@ -59,6 +59,9 @@ write_status() {
   "message": "$(json_escape "$message")"
 }
 EOF
+  # Legível pelo worker (job saude-operacao, montado só para leitura): só datas e situação, nada sensível.
+  chmod 755 "$(dirname "$RESTORE_STATUS_FILE")"
+  chmod 644 "${RESTORE_STATUS_FILE}.tmp"
   mv "${RESTORE_STATUS_FILE}.tmp" "$RESTORE_STATUS_FILE"
 }
 

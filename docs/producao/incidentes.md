@@ -25,6 +25,15 @@ SQL() { $C exec -T postgres psql -U postgres -d omni -c "$1"; }
 | Encarregado de dados | `privacidade@filtrovali.com.br` | avalia o risco aos titulares, decide e faz as comunicações |
 | Diretoria | — | aprova comunicações e medidas com impacto no negócio |
 
+## Como um incidente costuma chegar
+
+- **Aviso "Erro no Omni" no sino ou no celular** (quem tem o perfil admin): erro inesperado no web,
+  num job do worker ou no backup. Detalhes, versão e pilha em Administração → **Erros**. O mesmo
+  erro só avisa de novo depois de 6 h e se voltar a acontecer; marque como visto depois de resolver.
+- **Backup:** o worker confere de hora em hora o status do backup (`OPERACAO_STATUS=ligado`) e avisa
+  se o último envio ao B2 passar de 26 h, se uma execução falhar ou se o ensaio de restauração passar
+  de 35 dias (`docs/producao/backup.md`).
+
 ## 3. Conter (primeira hora)
 
 1. **Conta comprometida ou pessoa que saiu:** desative a pessoa no Entra (tire do grupo
