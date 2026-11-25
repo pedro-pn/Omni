@@ -6,9 +6,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createPool, withPerson } from "./client.ts";
 import { migrate } from "./migrate.ts";
-import { hashSessionToken, loginInterno, resolveSessionComTermos } from "./sessions.ts";
+import { hashSessionToken, loginInterno, novoTokenDeLink, resolveSessionComTermos } from "./sessions.ts";
 
-/** Login interno (0078): só admin cria, senha conferida no banco, bloqueio, troca obrigatória, sem e-mail. */
+/** Login interno (0078): só admin cria, senha criada pela pessoa num link de uso único, bloqueio, recuperação só com e-mail pessoal confirmado, sem e-mail. */
 
 const urls = {
   owner: process.env.TEST_DATABASE_URL_OWNER ?? "postgres://omni_owner:omni_owner_dev@localhost:5433/omni_test",
@@ -41,9 +41,10 @@ describe.skipIf(!available)("login interno", () => {
   let app: pg.Pool;
   let admin = "";
   let gerente = "";
+  let pessoa = "";
   const tag = randomUUID().slice(0, 6);
   const login = `campo.${tag}`;
-  const SENHA = "provisoria-123";
+  const SENHA = "minha-senha-1";
 
   beforeAll(async () => {
     await migrate(urls.owner);
@@ -63,67 +64,98 @@ describe.skipIf(!available)("login interno", () => {
     await Promise.all([owner?.end(), app?.end()]);
   });
 
-  const criar = (quem: string, l: string, senha = SENHA) => withPerson(app, quem, (db) => db.execute<{ id: string }>(sql`SELECT app.criar_acesso_interno('Pessoa do Campo', ${l}, ${senha}) AS id`));
+  const criar = (quem: string, l: string, hash: Buffer) => withPerson(app, quem, (db) => db.execute<{ id: string }>(sql`SELECT app.criar_acesso_interno('Pessoa do Campo', ${l}, ${hash}) AS id`));
   const entrar = (senha: string, l = login) => loginInterno(app, { login: l, senha, ip: "10.0.0.1" });
+  const usar = (token: string, senha: string) => app.query("SELECT app.usar_link_de_senha($1, $2) AS login", [hashSessionToken(token), senha]);
+  const verLink = async (token: string) => (await app.query("SELECT * FROM app.link_interno($1)", [hashSessionToken(token)])).rows[0];
 
-  it("só admin cria; usuário único; senha fraca recusada; ninguém lê as senhas pela tabela", async () => {
-    await falha(criar(gerente, `x.${tag}`), /sem permissão/);
-    await falha(criar(admin, `fraca.${tag}`, "curta1"), /senha fraca/);
-    await falha(criar(admin, "Maiúsculo"), /usuário inválido/);
-    const id = (await criar(admin, login)).rows[0]!.id;
-    await falha(criar(admin, login), /usuário já existe/);
-    const p = (await owner.query("SELECT email, acesso FROM people WHERE id = $1", [id])).rows[0];
-    expect(p).toEqual({ email: `${login}@interno.omni.invalid`, acesso: "interno" });
+  it("só admin cria, sem senha; o link (7 dias, uso único) cria a senha e devolve o usuário; ninguém lê as tabelas", async () => {
+    const link = novoTokenDeLink();
+    await falha(criar(gerente, `x.${tag}`, novoTokenDeLink().hash), /sem permissão/);
+    await falha(criar(admin, "Maiúsculo", novoTokenDeLink().hash), /usuário inválido/);
+    pessoa = (await criar(admin, login, link.hash)).rows[0]!.id;
+    await falha(criar(admin, login, novoTokenDeLink().hash), /usuário já existe/);
+    expect((await owner.query("SELECT email, acesso FROM people WHERE id = $1", [pessoa])).rows[0]).toEqual({ email: `${login}@interno.omni.invalid`, acesso: "interno" });
     await falha(app.query("SELECT password_hash FROM internal_credentials"), /permission denied/);
-    // A lista da Administração vê o usuário, nunca o hash; quem não é admin não vê nada.
-    expect((await withPerson(app, admin, (db) => db.execute(sql`SELECT * FROM app.logins_internos() WHERE person_id = ${id}::uuid`))).rows).toEqual([
-      { person_id: id, login, must_change: true, locked_until: null },
+    await falha(app.query("SELECT token_hash FROM internal_links"), /permission denied/);
+    // Sem senha ainda: não entra (como usuário inexistente).
+    expect(await entrar("qualquer-coisa-1")).toMatchObject({ resultado: "invalido", token: null });
+    const dias = (await owner.query("SELECT extract(epoch FROM expires_at - now()) / 86400 AS d FROM internal_links WHERE token_hash = $1", [link.hash])).rows[0].d;
+    expect(Math.round(Number(dias))).toBe(7);
+    expect(await verLink(link.token)).toEqual({ tipo: "senha", nome: "Pessoa do Campo", login, valido: true });
+    await falha(usar(link.token, "curta1"), /senha fraca/);
+    expect((await usar(link.token, SENHA)).rows[0].login).toBe(login);
+    // Uso único: o link não vale de novo e não mostra mais nada.
+    await falha(usar(link.token, "outra-senha-2"), /link inválido/);
+    expect(await verLink(link.token)).toEqual({ tipo: "senha", nome: null, login: null, valido: false });
+    expect(await verLink(novoTokenDeLink().token)).toBeUndefined();
+    // Admin vê o estado, nunca o hash nem o e-mail pessoal.
+    expect((await withPerson(app, admin, (db) => db.execute(sql`SELECT * FROM app.logins_internos() WHERE person_id = ${pessoa}::uuid`))).rows).toEqual([
+      { person_id: pessoa, login, tem_senha: true, link_vale_ate: null, locked_until: null, tem_email_recuperacao: false },
     ]);
     expect((await withPerson(app, gerente, (db) => db.execute(sql`SELECT * FROM app.logins_internos()`))).rows).toEqual([]);
   });
 
-  it("entra com a senha provisória numa sessão curta, que só abre a troca; troca e passa a valer o prazo normal", async () => {
-    expect(await entrar("errada-12345")).toMatchObject({ resultado: "invalido", token: null });
-    expect(await loginInterno(app, { login: `nao.existe.${tag}`, senha: SENHA })).toMatchObject({ resultado: "invalido", token: null });
+  it("entra; sem caixa de e-mail e sem o módulo E-mail; 5 erros bloqueiam (mesmo com a senha certa)", async () => {
     const r = await entrar(SENHA);
-    expect(r.resultado).toBe("trocar_senha");
-    const s = await resolveSessionComTermos(app, r.token, "qualquer");
-    expect(s).toMatchObject({ personId: r.personId, senhaPendente: true, acesso: "interno" });
-    const minutos = (await owner.query("SELECT extract(epoch FROM expires_at - now()) / 60 AS m FROM sessions WHERE token_hash = $1", [hashSessionToken(r.token!)])).rows[0].m;
-    expect(Number(minutos)).toBeLessThanOrEqual(30);
-    // Sem caixa de e-mail e sem o módulo E-mail; o resto liberado.
+    expect(r.resultado).toBe("ok");
+    expect(await resolveSessionComTermos(app, r.token, "qualquer")).toMatchObject({ personId: pessoa, acesso: "interno" });
     expect((await owner.query("SELECT count(*)::int AS n FROM mail_mailboxes WHERE email = $1", [`${login}@interno.omni.invalid`])).rows[0].n).toBe(0);
-    const modulo = (m: string) => withPerson(app, r.personId!, (db) => db.execute<{ ok: boolean }>(sql`SELECT app.modulo_liberado(${m}) AS ok`)).then((x) => x.rows[0]!.ok);
+    const modulo = (m: string) => withPerson(app, pessoa, (db) => db.execute<{ ok: boolean }>(sql`SELECT app.modulo_liberado(${m}) AS ok`)).then((x) => x.rows[0]!.ok);
     expect(await modulo("emails")).toBe(false);
     expect(await modulo("tarefas")).toBe(true);
-    // Trocar: senha atual errada, fraca ou igual não passam.
-    const trocar = (atual: string, nova: string) =>
-      withPerson(app, r.personId!, (db) => db.execute(sql`SELECT app.trocar_minha_senha(${atual}, ${nova}, ${hashSessionToken(r.token!)}, '12 hours'::interval)`));
-    await falha(trocar("errada-12345", "minha-senha-1"), /senha atual não confere/);
-    await falha(trocar(SENHA, "semnumero-aqui"), /senha fraca/);
-    await falha(trocar(SENHA, SENHA), /senha igual/);
-    const outra = await entrar(SENHA); // outra sessão aberta, que sai na troca
-    await trocar(SENHA, "minha-senha-1");
-    expect(await resolveSessionComTermos(app, r.token, "qualquer")).toMatchObject({ senhaPendente: false });
-    expect(await resolveSessionComTermos(app, outra.token, "qualquer")).toBeNull();
-    expect(await entrar(SENHA)).toMatchObject({ resultado: "invalido" });
-    expect(await entrar("minha-senha-1")).toMatchObject({ resultado: "ok" });
-  });
-
-  it("5 erros seguidos bloqueiam (mesmo com a senha certa); a Administração redefine, desbloqueia e derruba as sessões", async () => {
-    const aberta = await entrar("minha-senha-1");
     for (let i = 0; i < 4; i += 1) expect((await entrar(`errada-${i}-xyz`)).resultado).toBe("invalido");
     expect((await entrar("errada-5-xyz")).resultado).toBe("bloqueado");
-    expect((await entrar("minha-senha-1")).resultado).toBe("bloqueado");
-    const id = aberta.personId!;
-    await falha(withPerson(app, gerente, (db) => db.execute(sql`SELECT app.redefinir_senha_interna(${id}::uuid, 'nova-provisoria-9')`)), /sem permissão/);
-    await withPerson(app, admin, (db) => db.execute(sql`SELECT app.redefinir_senha_interna(${id}::uuid, 'nova-provisoria-9')`));
+    expect((await entrar(SENHA)).resultado).toBe("bloqueado");
+    await owner.query("UPDATE internal_credentials SET locked_until = now() - interval '1 second' WHERE person_id = $1", [pessoa]);
+    expect((await entrar(SENHA)).resultado).toBe("ok");
+  });
+
+  it("esqueci a senha só com e-mail pessoal confirmado (1 hora, 3 por hora); a senha atual vale até usar o link", async () => {
+    const pedir = () => app.query<{ email: string | null }>("SELECT app.pedir_recuperacao($1, $2) AS email", [login, novoTokenDeLink().hash]).then((x) => x.rows[0]!.email);
+    expect(await pedir()).toBeNull(); // sem e-mail pessoal: nada
+    expect((await app.query("SELECT app.pedir_recuperacao($1, $2) AS email", [`nao.existe.${tag}`, novoTokenDeLink().hash])).rows[0].email).toBeNull();
+    // Cadastrar o e-mail pede a senha atual e só vale confirmado.
+    const confirmar = novoTokenDeLink();
+    const pedirConfirmacao = (senha: string, email: string, hash: Buffer) => withPerson(app, pessoa, (db) => db.execute(sql`SELECT app.pedir_confirmacao_de_email(${senha}, ${email}, ${hash})`));
+    await falha(pedirConfirmacao("errada-123456", "pessoal@exemplo.com", confirmar.hash), /senha atual não confere/);
+    await falha(pedirConfirmacao(SENHA, "nao-e-email", novoTokenDeLink().hash), /e-mail inválido/);
+    await pedirConfirmacao(SENHA, "Pessoal@Exemplo.com", confirmar.hash);
+    expect(await pedir()).toBeNull(); // ainda não confirmado
+    expect((await app.query("SELECT app.confirmar_email_pelo_link($1) AS login", [confirmar.hash])).rows[0].login).toBe(login);
+    await falha(app.query("SELECT app.confirmar_email_pelo_link($1)", [confirmar.hash]), /link inválido/);
+    // Recuperar: o link vai para o e-mail confirmado; a senha atual vale até usar o link.
+    const rec = novoTokenDeLink();
+    expect((await app.query("SELECT app.pedir_recuperacao($1, $2) AS email", [login.toUpperCase(), rec.hash])).rows[0].email).toBe("pessoal@exemplo.com");
+    const horas = (await owner.query("SELECT extract(epoch FROM expires_at - now()) / 3600 AS h FROM internal_links WHERE token_hash = $1", [rec.hash])).rows[0].h;
+    expect(Math.round(Number(horas))).toBe(1);
+    expect((await entrar(SENHA)).resultado).toBe("ok");
+    const aberta = await entrar(SENHA);
+    expect(await verLink(rec.token)).toMatchObject({ tipo: "recuperar", valido: true });
+    await usar(rec.token, "senha-nova-22");
+    expect((await entrar(SENHA)).resultado).toBe("invalido");
+    expect((await entrar("senha-nova-22")).resultado).toBe("ok");
+    expect(await resolveSessionComTermos(app, aberta.token, "qualquer")).toBeNull(); // sessões antigas saem
+    // No máximo 3 pedidos por hora.
+    expect(await pedir()).not.toBeNull();
+    expect(await pedir()).not.toBeNull();
+    expect(await pedir()).toBeNull();
+  });
+
+  it("a Administração gera um link novo: a senha atual deixa de valer e as sessões saem; conta Microsoft não", async () => {
+    const aberta = await entrar("senha-nova-22");
+    const link = novoTokenDeLink();
+    await falha(withPerson(app, gerente, (db) => db.execute(sql`SELECT app.novo_link_de_senha(${pessoa}::uuid, ${link.hash})`)), /sem permissão/);
+    await withPerson(app, admin, (db) => db.execute(sql`SELECT app.novo_link_de_senha(${pessoa}::uuid, ${link.hash})`));
     expect(await resolveSessionComTermos(app, aberta.token, "qualquer")).toBeNull();
-    expect((await entrar("nova-provisoria-9")).resultado).toBe("trocar_senha");
-    // Desativada pela Administração: não entra.
-    await owner.query("UPDATE people SET active = false WHERE id = $1", [id]);
-    expect((await entrar("nova-provisoria-9")).resultado).toBe("desativada");
-    // Conta Microsoft não vira interna pela redefinição.
-    await falha(withPerson(app, admin, (db) => db.execute(sql`SELECT app.redefinir_senha_interna(${gerente}::uuid, 'nova-provisoria-9')`)), /não é uma conta interna/);
+    expect((await entrar("senha-nova-22")).resultado).toBe("invalido");
+    await usar(link.token, "terceira-senha-3");
+    expect((await entrar("terceira-senha-3")).resultado).toBe("ok");
+    await falha(withPerson(app, admin, (db) => db.execute(sql`SELECT app.novo_link_de_senha(${gerente}::uuid, ${novoTokenDeLink().hash})`)), /não é uma conta interna/);
+    // Desativada: não entra e o link não vale.
+    const outro = novoTokenDeLink();
+    await withPerson(app, admin, (db) => db.execute(sql`SELECT app.novo_link_de_senha(${pessoa}::uuid, ${outro.hash})`));
+    await owner.query("UPDATE people SET active = false WHERE id = $1", [pessoa]);
+    await falha(usar(outro.token, "quarta-senha-44"), /link inválido/);
   });
 });

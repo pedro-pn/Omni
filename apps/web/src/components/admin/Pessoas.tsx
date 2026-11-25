@@ -2,7 +2,7 @@ import { PERFIS, type PerfilCodigo } from "@omni/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { criarAcessoInterno, definirAtivo, definirPerfis, listPessoas, redefinirSenhaInterna, type PessoaAdmin } from "../../lib/admin-fns.ts";
+import { criarAcessoInterno, definirAtivo, definirPerfis, listPessoas, novoLinkDeSenha, type PessoaAdmin } from "../../lib/admin-fns.ts";
 import { definirPermissaoGravacao } from "../../lib/whatsapp-fns.ts";
 import { Aviso, mensagemDeErro } from "./ui.tsx";
 
@@ -37,11 +37,11 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
     onSettled: atualizar,
   });
 
-  const [senhaMostrada, setSenhaMostrada] = useState<{ nome: string; login: string; senha: string } | null>(null);
+  const [linkMostrado, setLinkMostrado] = useState<{ nome: string; login: string; link: string } | null>(null);
   const redefinir = useMutation({
-    mutationFn: (p: PessoaAdmin) => redefinirSenhaInterna({ data: { personId: p.id } }).then((r) => ({ nome: p.displayName, login: p.interno!.login, senha: r.senha })),
+    mutationFn: (p: PessoaAdmin) => novoLinkDeSenha({ data: { personId: p.id } }).then((r) => ({ nome: p.displayName, login: p.interno!.login, link: r.link })),
     onMutate: () => setErro(null),
-    onSuccess: setSenhaMostrada,
+    onSuccess: setLinkMostrado,
     onError: (e) => setErro(mensagemDeErro(e)),
     onSettled: atualizar,
   });
@@ -68,8 +68,8 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
         sozinha.
       </p>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {souAdmin && <NovoAcessoInterno aoCriar={(x) => (setSenhaMostrada(x), atualizar())} />}
-      {senhaMostrada && <SenhaProvisoria {...senhaMostrada} fechar={() => setSenhaMostrada(null)} />}
+      {souAdmin && <NovoAcessoInterno aoCriar={(x) => (setLinkMostrado(x), atualizar())} />}
+      {linkMostrado && <LinkDeSenha {...linkMostrado} fechar={() => setLinkMostrado(null)} />}
       <input
         type="search"
         value={busca}
@@ -95,7 +95,12 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
                 {(p.entra || p.inativoPor || p.interno) && (
                   <p className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
                     {p.interno && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">Login interno: {p.interno.login} · sem e-mail</span>}
-                    {p.interno?.senhaProvisoria && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">Ainda com a senha provisória</span>}
+                    {p.interno && !p.interno.temSenha && (
+                      <span className={`rounded-sm bg-superficie-2 px-1.5 py-0.5 ${p.interno.linkValeAte ? "text-muted" : "text-vermelho"}`}>
+                        {p.interno.linkValeAte ? `Ainda sem senha · link vale até ${ultimoAcesso(p.interno.linkValeAte)}` : "Sem senha e o link venceu: gere outro"}
+                      </span>
+                    )}
+                    {p.interno && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">{p.interno.temEmailRecuperacao ? "Recupera a senha pelo e-mail pessoal" : "Sem e-mail pessoal: só a Administração gera link"}</span>}
                     {p.interno?.bloqueadaAte && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-vermelho">Bloqueada por tentativas erradas</span>}
                     {p.entra === "atribuida" && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">Liberada no Entra</span>}
                     {p.entra === "fora" && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-vermelho">Fora do app no Entra</span>}
@@ -148,10 +153,10 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
               <button
                 type="button"
                 disabled={redefinir.isPending || !p.active}
-                onClick={() => confirm(`Gerar uma senha provisória nova para ${p.displayName}? A senha atual deixa de valer e as sessões abertas saem.`) && redefinir.mutate(p)}
+                onClick={() => confirm(`Gerar um link novo para ${p.displayName} criar a senha? A senha atual deixa de valer e as sessões abertas saem.`) && redefinir.mutate(p)}
                 className="mt-3 rounded-md border border-linha px-3 py-1.5 text-sm font-medium hover:bg-superficie-2 disabled:opacity-60"
               >
-                Redefinir senha
+                Gerar link de senha
               </button>
             )}
           </li>
@@ -163,14 +168,14 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
 }
 
 /** Criar o acesso de quem não tem conta Microsoft da empresa (só admin). */
-function NovoAcessoInterno({ aoCriar }: { aoCriar: (x: { nome: string; login: string; senha: string }) => void }) {
+function NovoAcessoInterno({ aoCriar }: { aoCriar: (x: { nome: string; login: string; link: string }) => void }) {
   const [aberto, setAberto] = useState(false);
   const [nome, setNome] = useState("");
   const [login, setLogin] = useState("");
   const criar = useMutation({
     mutationFn: () => criarAcessoInterno({ data: { nome, login } }),
     onSuccess: (r) => {
-      aoCriar({ nome, login: r.login, senha: r.senha });
+      aoCriar({ nome, login: r.login, link: r.link });
       setNome("");
       setLogin("");
       setAberto(false);
@@ -216,7 +221,7 @@ function NovoAcessoInterno({ aoCriar }: { aoCriar: (x: { nome: string; login: st
       {criar.isError && <Aviso tipo="erro">{mensagemDeErro(criar.error)}</Aviso>}
       <div className="flex gap-2">
         <button type="submit" disabled={criar.isPending} className="rounded-md bg-floresta px-3 py-1.5 text-sm font-medium text-white hover:bg-floresta-escura disabled:opacity-60">
-          {criar.isPending ? "Criando…" : "Criar e gerar a senha"}
+          {criar.isPending ? "Criando…" : "Criar e gerar o link"}
         </button>
         <button type="button" onClick={() => setAberto(false)} className="rounded-md px-3 py-1.5 text-sm hover:bg-superficie-2">
           Cancelar
@@ -226,20 +231,31 @@ function NovoAcessoInterno({ aoCriar }: { aoCriar: (x: { nome: string; login: st
   );
 }
 
-/** A senha provisória aparece uma vez só: quem administra passa à pessoa, que troca no primeiro acesso. */
-function SenhaProvisoria({ nome, login, senha, fechar }: { nome: string; login: string; senha: string; fechar: () => void }) {
+/** O link aparece uma vez só: quem administra passa à pessoa, que cria a própria senha nele (uso único, 7 dias). */
+function LinkDeSenha({ nome, login, link, fechar }: { nome: string; login: string; link: string; fechar: () => void }) {
+  const [copiado, setCopiado] = useState(false);
   return (
     <div role="status" className="space-y-2 rounded-lg border border-floresta bg-floresta-clara p-4 text-floresta-texto">
-      <p className="font-medium">Acesso de {nome}</p>
-      <p className="text-sm">
-        Usuário: <strong className="font-mono">{login}</strong> · Senha provisória: <strong className="font-mono select-all">{senha}</strong>
+      <p className="font-medium">
+        Link de senha de {nome} (usuário <span className="font-mono">{login}</span>)
       </p>
+      <p className="break-all rounded-md bg-superficie px-2 py-1.5 font-mono text-xs text-ink select-all">{link}</p>
       <p className="text-xs">
-        Anote e passe à pessoa por um canal seguro: esta senha não aparece de novo. No primeiro acesso, ela troca por uma só dela.
+        Passe à pessoa por um canal seguro (WhatsApp dela, por exemplo). Vale 7 dias e uma vez só: nele ela cria a própria senha e volta para a tela de
+        entrar com o usuário preenchido. Este link não aparece de novo.
       </p>
-      <button type="button" onClick={fechar} className="rounded-md border border-floresta px-3 py-1 text-sm font-medium hover:bg-superficie">
-        Já anotei
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => navigator.clipboard.writeText(link).then(() => setCopiado(true))}
+          className="rounded-md bg-floresta px-3 py-1 text-sm font-medium text-white hover:bg-floresta-escura"
+        >
+          {copiado ? "Copiado" : "Copiar o link"}
+        </button>
+        <button type="button" onClick={fechar} className="rounded-md border border-floresta px-3 py-1 text-sm font-medium hover:bg-superficie">
+          Fechar
+        </button>
+      </div>
     </div>
   );
 }

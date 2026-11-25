@@ -13,11 +13,6 @@ export const Route = createFileRoute("/")({
       const volta = caminhoDeVolta(`${location.pathname}${location.searchStr}`);
       throw redirect({ to: "/entrar", search: volta === "/" ? {} : { volta } });
     }
-    // Login interno com a senha provisória: primeiro trocar a senha (0078).
-    if (me.senhaPendente) {
-      const volta = caminhoDeVolta(`${location.pathname}${location.searchStr}`);
-      throw redirect({ to: "/conta/senha", search: volta === "/" ? {} : { volta } });
-    }
     // Termo de uso (LGPD) da versão atual ainda não aceito: primeiro a página do termo.
     if (me.termosPendentes) {
       const volta = caminhoDeVolta(`${location.pathname}${location.searchStr}`);

@@ -9,7 +9,6 @@ export const Route = createFileRoute("/conta/whatsapp")({
   beforeLoad: async () => {
     const me = await getMe();
     if (!me) throw redirect({ to: "/entrar", search: { volta: "/conta/whatsapp" } });
-    if (me.senhaPendente) throw redirect({ to: "/conta/senha", search: { volta: "/conta/whatsapp" } });
     if (me.termosPendentes) throw redirect({ to: "/termos", search: { volta: "/conta/whatsapp" } });
     return { me };
   },

@@ -10,7 +10,7 @@ import { SESSION_COOKIE } from "../../server/session.ts";
 /**
  * Login interno (0078): usuário e senha, para quem não tem conta Microsoft da empresa.
  * A senha é conferida no banco (bcrypt); 5 erros seguidos bloqueiam a conta por 15 min.
- * Com a senha provisória, a sessão é curta e só abre a troca de senha.
+ * A senha é criada pela própria pessoa no link de uso único que a Administração passa.
  */
 const form = z.object({
   login: z.string().trim().min(1).max(60),
@@ -33,8 +33,7 @@ export const Route = createFileRoute("/auth/interno")({
             return redirectTo(`/entrar?erro=${erro}`);
           }
           const cookie = serializeCookie(SESSION_COOKIE, r.token, { maxAgeSeconds: SESSION_TTL_HOURS * 3600 });
-          const destino = r.resultado === "trocar_senha" ? `/conta/senha${volta === "/" ? "" : `?volta=${encodeURIComponent(volta)}`}` : volta;
-          return redirectTo(destino, [cookie]);
+          return redirectTo(volta, [cookie]);
         } catch (error) {
           console.error("[auth] login interno falhou:", (error as Error).name);
           return redirectTo("/entrar?erro=falha-login");

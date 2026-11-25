@@ -13,7 +13,6 @@ export const Route = createFileRoute("/emails/janela")({
   beforeLoad: async ({ location }) => {
     const me = await getMe();
     if (!me) throw redirect({ to: "/entrar", search: { volta: location.href } });
-    if (me.senhaPendente) throw redirect({ to: "/conta/senha", search: { volta: location.href } });
     if (me.termosPendentes) throw redirect({ to: "/termos", search: { volta: location.href } });
     return { me };
   },

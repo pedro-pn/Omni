@@ -62,11 +62,11 @@ describe.skipIf(!available)("termo de uso", () => {
   });
 
   it("sem o aceite da versão atual a sessão fica pendente; aceita, abre; versão nova pede de novo", async () => {
-    expect(await resolveSessionComTermos(app, tokens.ana, "2026-11-11")).toEqual({ personId: p.ana, termosPendentes: true, senhaPendente: false, acesso: "microsoft" });
+    expect(await resolveSessionComTermos(app, tokens.ana, "2026-11-11")).toEqual({ personId: p.ana, termosPendentes: true, acesso: "microsoft" });
     expect(await aceitar(p.ana!, "2026-11-11")).toBe(true);
     expect(await aceitar(p.ana!, "2026-11-11")).toBe(true); // repetir não duplica
-    expect(await resolveSessionComTermos(app, tokens.ana, "2026-11-11")).toEqual({ personId: p.ana, termosPendentes: false, senhaPendente: false, acesso: "microsoft" });
-    expect(await resolveSessionComTermos(app, tokens.ana, "2027-01-01")).toEqual({ personId: p.ana, termosPendentes: true, senhaPendente: false, acesso: "microsoft" });
+    expect(await resolveSessionComTermos(app, tokens.ana, "2026-11-11")).toEqual({ personId: p.ana, termosPendentes: false, acesso: "microsoft" });
+    expect(await resolveSessionComTermos(app, tokens.ana, "2027-01-01")).toEqual({ personId: p.ana, termosPendentes: true, acesso: "microsoft" });
     expect(await resolveSessionComTermos(app, "token-que-nao-existe", "2026-11-11")).toBeNull();
     const audit = await owner.query("SELECT count(*)::int n FROM audit_log WHERE action = 'termos.aceitos' AND entity_id = $1", [p.ana]);
     expect(audit.rows[0].n).toBe(1);

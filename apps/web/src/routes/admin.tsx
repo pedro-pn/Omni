@@ -24,7 +24,6 @@ export const Route = createFileRoute("/admin")({
   beforeLoad: async () => {
     const me = await getMe();
     if (!me) throw redirect({ to: "/entrar" });
-    if (me.senhaPendente) throw redirect({ to: "/conta/senha", search: { volta: "/admin" } });
     if (me.termosPendentes) throw redirect({ to: "/termos", search: { volta: "/admin" } });
     // A tela é só para quem administra; as permissões de verdade estão no banco (RLS).
     if (!me.profiles.includes("admin") && !me.profiles.includes("diretoria")) throw redirect({ to: "/" });

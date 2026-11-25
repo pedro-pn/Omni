@@ -399,7 +399,7 @@ export function AppShell({ me }: { me: Me }) {
               )}
               {me.acesso === "interno" && (
                 <Link to="/conta/senha" className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-superficie-2">
-                  <KeyRound size={16} /> Trocar a senha
+                  <KeyRound size={16} /> Senha e recuperação
                 </Link>
               )}
               <Link to="/termos" className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-superficie-2">

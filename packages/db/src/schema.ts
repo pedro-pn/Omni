@@ -1493,15 +1493,28 @@ export const taskAttachments = pgTable("task_attachments", {
     focoId: uuid("foco_id").unique(),
 });
 
-/** Login interno (0078): sem privilégios para os papéis; só as funções app.*_interno leem e mudam. */
+/** Login interno (0078): sem privilégios para os papéis; só as funções app.* leem e mudam. */
 export const internalCredentials = pgTable("internal_credentials", {
   personId: uuid("person_id").primaryKey().references(() => people.id, { onDelete: "cascade" }),
   login: text("login").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  mustChange: boolean("must_change").notNull().default(true),
+  passwordHash: text("password_hash"),
+  recoveryEmail: text("recovery_email"),
+  recoveryVerifiedAt: timestamp("recovery_verified_at", { withTimezone: true }),
   failedAttempts: integer("failed_attempts").notNull().default(0),
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
-  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }).notNull().defaultNow(),
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => people.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Links de uso único do login interno (0078): criar a senha, recuperar e confirmar o e-mail pessoal (só o SHA-256). */
+export const internalLinks = pgTable("internal_links", {
+  tokenHash: bytea("token_hash").primaryKey(),
+  personId: uuid("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["senha", "recuperar", "confirmar_email"] }).notNull(),
+  email: text("email"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
   createdBy: uuid("created_by").references(() => people.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

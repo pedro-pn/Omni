@@ -7,7 +7,6 @@ export const Route = createFileRoute("/conta/api")({
   beforeLoad: async () => {
     const me = await getMe();
     if (!me) throw redirect({ to: "/entrar", search: { volta: "/conta/api" } });
-    if (me.senhaPendente) throw redirect({ to: "/conta/senha", search: { volta: "/conta/api" } });
     if (me.termosPendentes) throw redirect({ to: "/termos", search: { volta: "/conta/api" } });
     return { me };
   },

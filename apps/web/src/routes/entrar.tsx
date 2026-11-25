@@ -16,7 +16,13 @@ const ERROS: Record<string, string> = {
 };
 
 export const Route = createFileRoute("/entrar")({
-  validateSearch: z.object({ erro: z.string().max(40).optional(), volta: z.string().max(2000).optional() }),
+  validateSearch: z.object({
+    erro: z.string().max(40).optional(),
+    volta: z.string().max(2000).optional(),
+    // Depois de criar a senha pelo link (0078): o usuário já preenchido.
+    usuario: z.string().max(60).optional(),
+    aviso: z.string().max(40).optional(),
+  }),
   beforeLoad: async ({ search }) => {
     if (await getMe()) throw redirect({ href: caminhoDeVolta(search.volta) });
   },
@@ -27,7 +33,7 @@ export const Route = createFileRoute("/entrar")({
 
 function Entrar() {
   const options = Route.useLoaderData();
-  const { erro, volta: voltaBruta } = Route.useSearch();
+  const { erro, volta: voltaBruta, usuario, aviso } = Route.useSearch();
   const volta = caminhoDeVolta(voltaBruta);
   const mensagem = erro ? (ERROS[erro] ?? ERROS["falha-login"]) : null;
 
@@ -43,6 +49,11 @@ function Entrar() {
           <h1 className="text-lg font-semibold">Entrar no Omni</h1>
           <p className="mt-1 text-muted">Use a sua conta Microsoft da Filtrovali ou o usuário que a Administração criou para você.</p>
 
+          {aviso === "senha-criada" && !mensagem && (
+            <p role="status" className="mt-4 rounded-md border border-floresta/40 bg-floresta-clara px-3 py-2 text-floresta-texto">
+              Senha criada. Entre com o seu usuário e a senha nova.
+            </p>
+          )}
           {mensagem && (
             <p role="alert" className="mt-4 rounded-md border border-vermelho/40 px-3 py-2 text-vermelho">
               {mensagem}
@@ -68,6 +79,7 @@ function Entrar() {
               <input
                 name="login"
                 required
+                defaultValue={usuario ?? ""}
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}
@@ -76,7 +88,14 @@ function Entrar() {
             </label>
             <label className="mt-3 block">
               <span className="text-sm font-medium">Senha</span>
-              <input name="senha" type="password" required autoComplete="current-password" className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2" />
+              <input
+                name="senha"
+                type="password"
+                required
+                autoFocus={Boolean(usuario)}
+                autoComplete="current-password"
+                className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2"
+              />
             </label>
             <button
               type="submit"
@@ -84,7 +103,9 @@ function Entrar() {
             >
               Entrar com usuário e senha
             </button>
-            <p className="mt-2 text-xs text-muted">Esqueceu a senha? Peça uma nova à Administração do Omni.</p>
+            <a href={usuario ? `/recuperar-senha?usuario=${encodeURIComponent(usuario)}` : "/recuperar-senha"} className="mt-2 block text-xs font-medium text-floresta-texto hover:underline">
+              Esqueci a senha
+            </a>
           </form>
 
           {options.dev && (
