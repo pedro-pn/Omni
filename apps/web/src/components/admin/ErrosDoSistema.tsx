@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bug, Check, CircleCheck, DatabaseBackup, Server } from "lucide-react";
+import { Bug, Check, CircleCheck, DatabaseBackup, Gauge, Server } from "lucide-react";
 
 import { errosDoSistema, marcarErroVisto, type ErroDoSistemaNaTela } from "../../lib/erros-sistema-fns.ts";
 import { Aviso, botaoSecundario, mensagemDeErro } from "./ui.tsx";
@@ -34,7 +34,7 @@ export function ErrosDoSistema() {
       <div className="rounded-lg border border-linha bg-superficie p-4 text-sm">
         <p className="font-medium">Como funciona</p>
         <p className="mt-1 text-muted">
-          Todo erro inesperado do Omni (telas, rotas e tarefas automáticas) e todo problema do backup fica aqui, agrupado. Quem administra recebe um aviso
+          Todo erro inesperado do Omni (telas, rotas e tarefas automáticas), todo problema do backup e o gasto da IA perto do teto diário ficam aqui, agrupado. Quem administra recebe um aviso
           no sino e no celular quando um erro aparece, e de novo se ele voltar depois de 6 horas. Marque como visto depois de resolver: se acontecer de
           novo, ele volta para a lista.
         </p>
@@ -49,13 +49,19 @@ export function ErrosDoSistema() {
           <p className="text-sm text-muted">{abertos ? `${abertos} erro${abertos === 1 ? "" : "s"} sem revisão.` : "Todos os erros foram vistos."}</p>
           <ul className="divide-y divide-linha rounded-lg border border-linha bg-superficie">
             {erros.map((e) => {
-              const { rotulo, Icone } = ORIGEM[e.origem];
+              const { rotulo, Icone } = e.origem === "operacao" && e.local === "ia" ? { rotulo: "Gasto da IA", Icone: Gauge } : ORIGEM[e.origem];
               return (
                 <li key={e.id} className={`flex flex-wrap items-start gap-3 p-4 ${e.vistoEm ? "" : "bg-vermelho/5"}`}>
                   <Icone size={18} aria-hidden className={`mt-0.5 ${e.vistoEm ? "text-muted" : "text-vermelho"}`} />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">
-                      {rotulo} · <span className="break-all">{e.local}</span>
+                      {rotulo}
+                      {e.origem !== "operacao" && (
+                        <>
+                          {" · "}
+                          <span className="break-all">{e.local}</span>
+                        </>
+                      )}
                     </p>
                     <p className="text-sm break-words">
                       <span className="font-mono text-xs">{e.nome}</span> {e.mensagem}

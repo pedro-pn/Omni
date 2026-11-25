@@ -6,6 +6,7 @@ export * from "./ia/reuniao.ts";
 export * from "./ia/chamada.ts";
 export * from "./ia/assinatura.ts";
 export * from "./ia/alerta.ts";
+export * from "./ia/teto.ts";
 export * from "./mission-format.ts";
 export * from "./mission-stages.ts";
 export * from "./vencimento.ts";

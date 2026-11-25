@@ -55,6 +55,9 @@ const schema = z
     IA_ALERTAS: z.enum(["desligada", "ligada"]).default("desligada"),
     OPENAI_API_KEY: opcional(z.string().min(20)),
     OPENAI_MODEL: z.string().min(3).default("gpt-6-luna"),
+    /** Teto diário da IA (E11), o mesmo do worker: passou, nenhuma chamada ao modelo sai até a meia-noite. */
+    IA_TETO_TOKENS_DIA: z.coerce.number().int().min(0).default(2_000_000),
+    IA_TETO_CHAMADAS_DIA: z.coerce.number().int().min(0).default(3_000),
     // Notificações no celular (Web Push): a chave pública vai para o navegador; a privada fica só no worker.
     WEB_PUSH_PUBLIC_KEY: opcional(z.string().regex(/^[A-Za-z0-9_-]{80,100}$/)),
   })

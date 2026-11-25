@@ -57,6 +57,9 @@ const schema = z
   IA_ALERTAS: z.enum(["desligada", "ligada"]).default("desligada"),
   /** Status do backup e do ensaio (deploy/backup-prod.sh, restore-drill.sh) montado em OPERACAO_STATUS_DIR (só produção). */
   OPERACAO_STATUS: z.enum(["desligado", "ligado"]).default("desligado"),
+  /** Teto diário da IA (E11): passou, nenhuma chamada ao modelo sai até a meia-noite (Brasília). 0 desliga o critério. */
+  IA_TETO_TOKENS_DIA: z.coerce.number().int().min(0).default(2_000_000),
+  IA_TETO_CHAMADAS_DIA: z.coerce.number().int().min(0).default(3_000),
   OPERACAO_STATUS_DIR: z.string().default("/ops-status"),
   /**
    * Aviso imediato de e-mail novo (0070): o Graph avisa em APP_ORIGIN/api/graph/avisos

@@ -1,13 +1,13 @@
 import { comandoDeAlerta, ESQUEMA_ENTENDER_ALERTA, QUEM_MARCAR, resumoDaRegra, SISTEMA_ENTENDER_ALERTA, tituloMissao, validarRegra, VERSAO_PROMPT_ALERTA, type RegraAlertaIA } from "@omni/core";
 import { schema, withPerson } from "@omni/db";
-import { LlmError } from "@omni/integrations/openai";
+import { LlmError, TetoDiarioAtingido } from "@omni/integrations/openai";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { getPool } from "../server/db.ts";
-import { getLlmAlertas } from "../server/llm.ts";
+import { getLlmAlertas, registrarChamadaLlm } from "../server/llm.ts";
 import { personIdFromRequest } from "../server/session.ts";
 import { ErroParaTela } from "./erros.ts";
 
@@ -49,11 +49,16 @@ export const criarAlertaPorComando = createServerFn({ method: "POST" })
         nome: "entender_alerta",
         esquema: ESQUEMA_ENTENDER_ALERTA as unknown as Record<string, unknown>,
       });
+      await registrarChamadaLlm({ finalidade: "alerta_entender", modelo: r.modelo, tokensEntrada: r.tokensEntrada, tokensSaida: r.tokensSaida, duracaoMs: r.duracaoMs });
       const v = validarRegra(r.dados);
       if ("duvida" in v) return { criado: false, duvida: v.duvida };
       regra = v.regra;
     } catch (error) {
-      if (error instanceof LlmError) throw new ErroParaTela("A IA não respondeu agora. Tente de novo em instantes.");
+      if (error instanceof TetoDiarioAtingido) throw new ErroParaTela("A IA atingiu o limite de uso de hoje. Tente de novo amanhã.");
+      if (error instanceof LlmError) {
+        await registrarChamadaLlm({ finalidade: "alerta_entender", modelo: ia.modelo, erro: error.code ?? `http_${error.status}` });
+        throw new ErroParaTela("A IA não respondeu agora. Tente de novo em instantes.");
+      }
       throw error;
     }
     return withPerson(getPool(), personId, async (db) => {
