@@ -78,17 +78,24 @@ Os arquivos do SharePoint (anexos, gravações arquivadas) já ficam fora da VPS
 
    No ensaio: `"status": "SUCCESS"`, `"secrets": "conferidos"` e `hoursSinceLastSync` baixo.
 
-5. **Cron do `omni`** (`crontab -e`, como `omni`), com o `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` do
-   filtroAPP para receber as falhas:
+5. **Cron do `omni`** (`crontab -e`, como `omni`). Horários no relógio da VPS (UTC: o diário roda às
+   23h20 de Brasília). Os minutos :20 e :50 não coincidem com o cron do filtroAPP.
 
    ```cron
-   TELEGRAM_TOKEN=<o mesmo do filtroAPP>
-   TELEGRAM_CHAT_ID=<o mesmo do filtroAPP>
-   20 0,3-23 * * * B2_URI=b2://filtrovali-omni/hourly-db INCLUDE_VOLUMES=false INCLUDE_SECRETS=false $HOME/apps/Omni/deploy/backup-prod.sh >> $HOME/logs/backup-omni.log 2>&1
-   20 2 * * * B2_URI=b2://filtrovali-omni/daily BACKUP_LOCK_TIMEOUT_SECONDS=7200 $HOME/apps/Omni/deploy/backup-prod.sh >> $HOME/logs/backup-omni.log 2>&1
-   20 1 1 * * B2_URI=b2://filtrovali-omni/monthly BACKUP_LOCK_TIMEOUT_SECONDS=7200 $HOME/apps/Omni/deploy/backup-prod.sh >> $HOME/logs/backup-omni.log 2>&1
-   50 4 2 * * $HOME/apps/Omni/deploy/restore-drill.sh >> $HOME/logs/restore-drill-omni.log 2>&1
+   # De hora em hora (menos 01h e 02h): só os bancos -> hourly-db/ (7 dias)
+   20 0,3-23 * * * B2_URI=b2://filtrovali-omni/hourly-db INCLUDE_VOLUMES=false INCLUDE_SECRETS=false /home/omni/apps/Omni/deploy/backup-prod.sh >> /home/omni/logs/backup-omni.log 2>&1
+   # Todo dia 02h20: completo -> daily/ (60 dias)
+   20 2 * * * B2_URI=b2://filtrovali-omni/daily BACKUP_LOCK_TIMEOUT_SECONDS=7200 /home/omni/apps/Omni/deploy/backup-prod.sh >> /home/omni/logs/backup-omni.log 2>&1
+   # Dia 1, 01h20: completo -> monthly/ (365 dias)
+   20 1 1 * * B2_URI=b2://filtrovali-omni/monthly BACKUP_LOCK_TIMEOUT_SECONDS=7200 /home/omni/apps/Omni/deploy/backup-prod.sh >> /home/omni/logs/backup-omni.log 2>&1
+   # Dia 2, 04h50: ensaio de restauração do último diário
+   50 4 2 * * /home/omni/apps/Omni/deploy/restore-drill.sh >> /home/omni/logs/restore-drill-omni.log 2>&1
    ```
+
+   Sem aviso por e-mail ou Telegram na produção: uma falha fica no log e no JSON de status
+   (`~/backups/omni-b2/status/`). O alerta que chega a uma pessoa é a entrega E09 (alerta de erro),
+   que vai ler esses JSON. Os scripts ainda aceitam `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` se um dia
+   voltarem.
 
    Os scripts rodam da pasta do repositório: uma publicação (`deploy/publicar.sh`) os atualiza junto
    com o código.
