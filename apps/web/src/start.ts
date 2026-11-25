@@ -1,9 +1,11 @@
 import { isNotFound, isRedirect } from "@tanstack/react-router";
 import { createMiddleware, createStart } from "@tanstack/react-start";
+import { getRequest, setResponseHeader, setResponseStatus } from "@tanstack/react-start/server";
 import { ZodError } from "zod";
 
 import { ErroParaTela } from "./lib/erros.ts";
 import { registrarErroDoWeb } from "./server/erros.ts";
+import { limitarFuncao } from "./server/limites.ts";
 
 /**
  * Toda server function passa por aqui. Erros para a tela (ErroParaTela) e
@@ -12,6 +14,13 @@ import { registrarErroDoWeb } from "./server/erros.ts";
  * sistema (Administração → Erros, com aviso a quem administra).
  */
 const errosSeguros = createMiddleware({ type: "function" }).server(async ({ next, serverFnMeta }) => {
+  // Ações caras (IA, envio de mensagens, Prisma, chaves): limite por pessoa (E10).
+  const esperar = limitarFuncao(serverFnMeta?.name, getRequest());
+  if (esperar) {
+    setResponseStatus(429);
+    setResponseHeader("Retry-After", String(esperar));
+    throw new ErroParaTela(`Muitas tentativas seguidas. Aguarde ${esperar} segundos e tente de novo.`);
+  }
   try {
     return await next();
   } catch (error) {
