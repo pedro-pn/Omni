@@ -72,7 +72,13 @@ write_backup_status() {
   "line": $line_no
 }
 EOF
+  # Legível pelo worker (job saude-operacao, montado só para leitura): só datas e situação, nada sensível.
+  chmod 755 "$(dirname "$BACKUP_STATUS_FILE")"
+  chmod 644 "${BACKUP_STATUS_FILE}.tmp"
   mv "${BACKUP_STATUS_FILE}.tmp" "$BACKUP_STATUS_FILE"
+  # As cópias locais sobrescrevem o status várias vezes por dia; o do último envio ao B2 fica à parte
+  # (o worker confere a idade dele: job saude-operacao).
+  if [ -n "$B2_URI" ]; then install -m 644 "$BACKUP_STATUS_FILE" "$(dirname "$BACKUP_STATUS_FILE")/backup-remoto-latest.json"; fi
 }
 
 avisar() {

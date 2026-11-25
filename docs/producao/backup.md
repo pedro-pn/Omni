@@ -109,10 +109,12 @@ Os arquivos do SharePoint (anexos, gravações arquivadas) já ficam fora da VPS
    50 4 2 * * /home/omni/apps/Omni/deploy/restore-drill.sh >> /home/omni/logs/restore-drill-omni.log 2>&1
    ```
 
-   Sem aviso por e-mail ou Telegram na produção: uma falha fica no log e no JSON de status
-   (`~/backups/omni-b2/status/`). O alerta que chega a uma pessoa é a entrega E09 (alerta de erro),
-   que vai ler esses JSON. Os scripts ainda aceitam `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` se um dia
-   voltarem.
+   Sem aviso por e-mail ou Telegram na produção. Quem avisa é o worker do Omni (job `saude-operacao`,
+   de hora em hora, com `OPERACAO_STATUS=ligado`): ele lê `~/backups/omni-b2/status/` (montado só
+   para leitura em `/ops-status`) e, se uma execução falhar, se o último envio ao B2
+   (`backup-remoto-latest.json`) passar de 26 h ou se o ensaio passar de 35 dias, registra um erro
+   do sistema, que vira aviso no sino e no celular de quem é admin (Administração → Erros). Os
+   scripts ainda aceitam `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` se um dia voltarem.
 
    Os scripts rodam da pasta do repositório: uma publicação (`deploy/publicar.sh`) os atualiza junto
    com o código.

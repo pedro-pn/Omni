@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, AtSign, Bell, BellRing, CheckCircle2, MessageSquare, PhoneMissed, ShieldAlert, Siren, SmilePlus, Sparkles, UserPlus } from "lucide-react";
+import { AlarmClock, AtSign, Bell, BellRing, Bug, CheckCircle2, MessageSquare, PhoneMissed, ShieldAlert, Siren, SmilePlus, Sparkles, UserPlus } from "lucide-react";
 import { useState } from "react";
 
 import { listarAvisos, marcarAvisosLidos, type Aviso } from "../../lib/avisos-fns.ts";
@@ -18,6 +18,7 @@ const ICONE: Record<Aviso["tipo"], typeof Bell> = {
   teste_push: BellRing,
   chamada_perdida: PhoneMissed,
   risco: ShieldAlert,
+  erro_sistema: Bug,
 };
 
 function haQuanto(iso: string): string {
@@ -105,6 +106,9 @@ export function SinoAvisos({
                       } else if (a.tipo === "risco") {
                         // Alerta de risco: a lista fica na Administração → Segurança.
                         window.location.href = "/admin?aba=seguranca";
+                      } else if (a.tipo === "erro_sistema") {
+                        // Erro do sistema (E09): a lista fica na Administração → Erros.
+                        window.location.href = "/admin?aba=erros";
                       }
                     }}
                     className={`flex w-full gap-3 border-b border-linha px-4 py-3 text-left hover:bg-superficie-2 ${a.lido ? "" : "bg-floresta-clara"}`}

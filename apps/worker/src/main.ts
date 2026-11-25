@@ -41,6 +41,7 @@ import { lerAssinaturas } from "./ia/assinaturas.ts";
 import { vincularPelasAssinaturas } from "./contatos/assinaturas.ts";
 import { enviarAvisosPorEmail, enviarResumoSemanal, type EnviarEmail } from "./tarefas/emails.ts";
 import { vigiarRiscos } from "./seguranca/riscos.ts";
+import { avisarErros, conferirOperacao, registrarErroDoWorker } from "./operacao/erros.ts";
 
 /**
  * Worker do Omni. Filas pg-boss com política `exclusive` (nunca duas execuções
@@ -67,6 +68,8 @@ import { vigiarRiscos } from "./seguranca/riscos.ts";
  *   whatsapp-estado     5 min  confere na Evolution do Omni o estado dos números (o webhook avisa na hora)
  *   retencao           03:40   retenção por tipo de dado (RETENCAO: ensaio só conta, real apaga)
  *   riscos             10 min  alertas de risco: download em massa e arquivos enviados para fora (Administração e diretoria)
+ *   alertas-erros       5 min  erros do sistema novos (ou que voltaram depois de 6 h) → aviso no sino e no celular de quem é admin
+ *   saude-operacao      1 h    status do backup e do ensaio de restauração (OPERACAO_STATUS=ligado) → erro do sistema se passar do limite
  *   whatsapp-recuperar 10 min  relê as últimas 2 h na Evolution e grava o que o webhook perdeu
  *   whatsapp-perfis    30 min  nome dos grupos e endereço da foto das conversas (lista da Evolution)
  *   chamadas-arquivar   2 min  gravações → M4A cifrado no SharePoint (OmniAnexos); apaga de vez as excluídas/vencidas
@@ -91,6 +94,16 @@ boss.on("error", (error) => console.error("[pg-boss]", error.message));
 await boss.start();
 console.log(`[worker] versão ${process.env.OMNI_VERSAO || "desconhecida"}`);
 
+// Erros fora dos jobs (promessa sem tratamento, exceção no processo): registrados antes de sair.
+process.on("unhandledRejection", (motivo) => {
+  console.error("[worker] promessa rejeitada sem tratamento:", motivo);
+  void registrarErroDoWorker(db, motivo, "processo");
+});
+process.on("uncaughtException", (erro) => {
+  console.error("[worker] exceção não tratada:", erro);
+  void registrarErroDoWorker(db, erro, "processo").finally(() => process.exit(1));
+});
+
 const log = (job: string, dados: object) => console.log(JSON.stringify({ job, at: new Date().toISOString(), ...dados }));
 
 /**
@@ -109,7 +122,15 @@ async function tarefa(nome: string, cron: string, fn: () => Promise<object>, ini
   await boss.createQueue(nome, { policy: "exclusive", retryLimit: 2, retryDelay: 60, expireInSeconds: 15 * 60 });
   const orfas = await liberarOrfas(nome);
   if (orfas) log(nome, { orfasLiberadas: orfas });
-  await boss.work(nome, async () => log(nome, await fn()));
+  await boss.work(nome, async () => {
+    try {
+      log(nome, await fn());
+    } catch (error) {
+      // Erro do sistema (E09): fica registrado e avisa quem administra; o pg-boss tenta de novo.
+      await registrarErroDoWorker(db, error, nome);
+      throw error;
+    }
+  });
   await boss.schedule(nome, cron, null, { tz: env.TZ_EMPRESA });
   if (iniciarAgora) await boss.send(nome, null);
 }
@@ -128,6 +149,14 @@ await tarefa("ia-publicar", "*/5 * * * *", async () => publicarPerguntas(db, awa
 await tarefa("tarefas-lembretes", "* * * * *", () => enviarLembretes(db));
 // Alertas de risco (Fase 11): download em massa e envio de arquivos para fora.
 await tarefa("riscos", "*/10 * * * *", () => vigiarRiscos(db), false);
+
+// Erros do sistema (E09): aviso a quem administra e conferência do backup.
+await tarefa("alertas-erros", "*/5 * * * *", () => avisarErros(db), false);
+if (env.OPERACAO_STATUS === "ligado") {
+  await tarefa("saude-operacao", "35 * * * *", () => conferirOperacao(db, env.OPERACAO_STATUS_DIR));
+} else {
+  console.warn("[worker] OPERACAO_STATUS desligado: o status do backup não é conferido");
+}
 // Retenção por tipo de dado (0066): todo dia às 03:40; prazos na função app.aplicar_retencao.
 if (env.RETENCAO !== "desligada") {
   await tarefa(

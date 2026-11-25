@@ -27,3 +27,4 @@ export * from "./termos.ts";
 export * from "./riscos.ts";
 export * from "./contatos.ts";
 export * from "./modulos.ts";
+export * from "./erros.ts";

@@ -55,6 +55,9 @@ const schema = z
   IA_ASSINATURAS: z.enum(["desligada", "ligada"]).default("desligada"),
   /** Alertas pedidos à IA no Interno/Gerencial (@IA, /alerta): leitura dos RDOs contra cada alerta ativo. */
   IA_ALERTAS: z.enum(["desligada", "ligada"]).default("desligada"),
+  /** Status do backup e do ensaio (deploy/backup-prod.sh, restore-drill.sh) montado em OPERACAO_STATUS_DIR (só produção). */
+  OPERACAO_STATUS: z.enum(["desligado", "ligado"]).default("desligado"),
+  OPERACAO_STATUS_DIR: z.string().default("/ops-status"),
   /**
    * Aviso imediato de e-mail novo (0070): o Graph avisa em APP_ORIGIN/api/graph/avisos
    * (precisa ser HTTPS público) e o worker lê as caixas na hora.

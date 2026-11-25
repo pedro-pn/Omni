@@ -472,7 +472,7 @@ export const taskActivity = pgTable("task_activity", {
 });
 
 // 0011: avisos (o sino). Nascem de triggers ou do worker; a tela só marca como lido.
-export const TIPOS_AVISO = ["tarefa_atribuida", "tarefa_concluida", "tarefa_comentario", "tarefa_lembrete", "tarefa_mencao", "tarefa_reacao", "ia_alerta", "ia_pergunta", "teste_push", "chamada_perdida", "risco"] as const;
+export const TIPOS_AVISO = ["tarefa_atribuida", "tarefa_concluida", "tarefa_comentario", "tarefa_lembrete", "tarefa_mencao", "tarefa_reacao", "ia_alerta", "ia_pergunta", "teste_push", "chamada_perdida", "risco", "erro_sistema"] as const;
 
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1491,3 +1491,23 @@ export const taskAttachments = pgTable("task_attachments", {
     focoId: uuid("foco_id").unique(),
 });
 
+
+// ---------------------------------------------------------------- 0079: erros do sistema (E09, pilar 12.1)
+
+/** Erros inesperados do web e do worker e problemas da operação, agrupados por assinatura. Só admin lê. */
+export const systemErrors = pgTable("system_errors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fingerprint: text("fingerprint").notNull().unique(),
+  source: text("source", { enum: ["web", "worker", "operacao"] }).notNull(),
+  name: text("name").notNull(),
+  message: text("message").notNull(),
+  detail: text("detail"),
+  location: text("location").notNull(),
+  version: text("version"),
+  occurrences: integer("occurrences").notNull().default(1),
+  firstSeen: timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
+  lastSeen: timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
+  alertedAt: timestamp("alerted_at", { withTimezone: true }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewedBy: uuid("reviewed_by").references(() => people.id),
+});
