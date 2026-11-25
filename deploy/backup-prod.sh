@@ -3,7 +3,7 @@
 # Roda como o usuário omni, pelo cron dele (passo a passo em docs/producao/backup.md).
 #
 #   B2_URI=b2://filtrovali-omni/daily deploy/backup-prod.sh                       # completo
-#   B2_URI=b2://filtrovali-omni/hourly-db INCLUDE_VOLUMES=false INCLUDE_SECRETS=false deploy/backup-prod.sh
+#   LOCAL_BACKUP_KEEP=2 deploy/backup-prod.sh                                     # só cópia local
 #
 # Guarda, numa pasta com data e hora:
 #   omni.dump            banco do Omni (pg_dump formato custom)
@@ -43,7 +43,9 @@ B2_BIN="${B2_BIN:-b2}"
 B2_ENV_FILE="${B2_ENV_FILE:-${HOME}/.config/omni-backup/b2.env}"
 # Chave do B2 só do bucket do Omni, separada da do filtroAPP (o b2 guarda a conta autorizada nesse arquivo).
 export B2_ACCOUNT_INFO="${B2_ACCOUNT_INFO:-${HOME}/.config/omni-backup/b2_account_info}"
-LOCAL_BACKUP_KEEP="${LOCAL_BACKUP_KEEP:-5}"
+# Mesma regra do filtroAPP: com LOCAL_BACKUP_KEEP, guarda as N cópias locais mais novas; sem ele,
+# depois de um envio ao B2 bem-sucedido, fica só a cópia desta execução; sem envio, nada é apagado.
+LOCAL_BACKUP_KEEP="${LOCAL_BACKUP_KEEP:-}"
 # O Omni roda no Docker rootless do usuário omni (não no Docker do sistema, que é o do filtroAPP).
 # O cron não carrega o ~/.profile: usa o socket do próprio usuário se ninguém disse outro.
 if [ -z "${DOCKER_HOST:-}" ] && [ -S "/run/user/$(id -u)/docker.sock" ]; then
@@ -70,7 +72,13 @@ write_backup_status() {
   "line": $line_no
 }
 EOF
+  # Legível pelo worker (job saude-operacao, montado só para leitura): só datas e situação, nada sensível.
+  chmod 755 "$(dirname "$BACKUP_STATUS_FILE")"
+  chmod 644 "${BACKUP_STATUS_FILE}.tmp"
   mv "${BACKUP_STATUS_FILE}.tmp" "$BACKUP_STATUS_FILE"
+  # As cópias locais sobrescrevem o status várias vezes por dia; o do último envio ao B2 fica à parte
+  # (o worker confere a idade dele: job saude-operacao).
+  if [ -n "$B2_URI" ]; then install -m 644 "$BACKUP_STATUS_FILE" "$(dirname "$BACKUP_STATUS_FILE")/backup-remoto-latest.json"; fi
 }
 
 avisar() {
@@ -176,6 +184,13 @@ if [ -n "$B2_URI" ]; then
   UPLOAD_SUCCEEDED=true
 fi
 
-prune_local_backups "$LOCAL_BACKUP_KEEP"
+if [ -n "$LOCAL_BACKUP_KEEP" ]; then
+  prune_local_backups "$LOCAL_BACKUP_KEEP"
+elif [ "$UPLOAD_SUCCEEDED" = "true" ]; then
+  echo "[backup] envio concluído: apagando as outras cópias locais"
+  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name "20*" ! -path "$RUN_DIR" -exec rm -rf -- {} +
+else
+  echo "[backup] sem envio ao B2: cópias locais mantidas"
+fi
 echo "[backup] pronto: $RUN_DIR"
 write_backup_status "SUCCESS" 0 0

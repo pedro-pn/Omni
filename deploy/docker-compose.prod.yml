@@ -177,7 +177,12 @@ services:
       WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
       WEB_PUSH_PRIVATE_KEY: ${WEB_PUSH_PRIVATE_KEY:-}
       WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-https://omni.filtrovali.com.br}
-    volumes: *segredos
+      # Status do backup e do ensaio (docs/producao/backup.md): "ligado" só na produção.
+      OPERACAO_STATUS: ${OPERACAO_STATUS:-desligado}
+    volumes:
+      - ${OMNI_SECRETS_DIR:-./secrets}:/run/secrets/omni:ro
+      # Pasta de status do backup-prod.sh e do restore-drill.sh, só leitura (criada vazia se não existir).
+      - ${OPERACAO_STATUS_HOST_DIR:-/home/omni/backups/omni-b2/status}:/ops-status:ro
     depends_on:
       migrate: { condition: service_completed_successfully }
     mem_limit: 768m

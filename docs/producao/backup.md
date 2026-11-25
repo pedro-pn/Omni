@@ -1,17 +1,32 @@
 # Backup e restauração do Omni
 
-Mesmo modelo do filtroAPP (`deploy/BACKUP.md` dele): cópia no Backblaze B2 de hora em hora, por dia e
-por mês, e ensaio de restauração mensal. Bucket próprio: **`filtrovali-omni`** (privado).
-Diferente do filtroAPP, **tudo roda como o usuário `omni`**, pelo cron dele, sem root.
+Mesmo modelo do filtroAPP (`deploy/BACKUP.md` dele, conferido em produção em 25/11/2026): cópias
+locais completas ao longo do dia, um diário e um mensal no Backblaze B2 e o ensaio de restauração
+mensal. Bucket próprio: **`filtrovali-omni`** (privado). Diferente do filtroAPP, **tudo roda como o
+usuário `omni`**, pelo cron dele, sem root.
 
-| Agenda | Destino no B2 | O que leva | Guarda no B2 |
+| Rotina | Horário UTC | Brasília (UTC−3) | Destino |
 |---|---|---|---|
-| De hora em hora (menos 01h e 02h) | `hourly-db/` | só o banco do Omni e o da Evolution | 7 dias |
-| Todo dia às 02h20 | `daily/` | bancos, sessões do WhatsApp, gravações pendentes, segredos cifrados | 60 dias |
-| Dia 1 às 01h20 | `monthly/` | igual ao diário | 365 dias |
-| Dia 2 às 04h50 | ensaio de restauração do último diário | — | — |
+| Cópia local completa | 00h20, 03h20, 08h20, 13h20, 18h20 e 23h20 | 21h20 (dia anterior), 00h20, 05h20, 10h20, 15h20 e 20h20 | `~/backups/omni-b2/<data-hora>` (guarda 2) |
+| Diário completo | 02h20 | 23h20 (dia anterior) | `b2://filtrovali-omni/daily/<data-hora>` |
+| Mensal completo | Dia 1, 01h20 | Último dia do mês anterior, 22h20 | `b2://filtrovali-omni/monthly/<data-hora>` |
+| Ensaio de restauração | Dia 2, 04h50 | Dia 2, 01h50 | PostgreSQL descartável; status local |
 
-Os minutos (:20 e :50) ficam fora dos horários do filtroAPP para os dois não rodarem juntos.
+São os horários do filtroAPP deslocados 20 minutos (o ensaio, 20 minutos depois do dele), para os
+dois não disputarem CPU e disco na mesma VPS. Como no filtroAPP, `0,3-23/5` também roda às 23h e às
+00h (uma hora de intervalo nessa virada). Não há backup de hora em hora.
+
+**Retenção no B2** (Lifecycle Rules do bucket, iguais às do filtroAPP):
+
+| Prefixo | Ocultar após o envio | Apagar após ocultar |
+|---|---|---|
+| `daily/` | 7 dias | 1 dia |
+| `monthly/` | 60 dias | 1 dia |
+
+**Retenção na VPS** (mesma regra do script do filtroAPP): a cópia local guarda as 2 mais novas
+(`LOCAL_BACKUP_KEEP=2`); depois de um diário ou mensal enviado com sucesso, fica só aquela execução,
+e as cópias locais voltam a acumular até 2. Sem envio bem-sucedido, nada é apagado. A cópia de antes
+de publicar (`deploy/backup.sh`) fica separada, em `~/backups/omni/`.
 
 **Por que o usuário `omni`:** o Omni roda no Docker rootless dele (`/run/user/<uid>/docker.sock`, com
 *linger* ligado), e ele já tem o `.env.production` e os certificados; root não acrescenta nada. Os
@@ -21,9 +36,8 @@ scripts usam esse socket mesmo no cron, que não carrega o `~/.profile`.
 Por isso ela é criada **sem `deleteFiles`**: quem invadir a conta grava e lê, mas não apaga backups.
 Quem apaga é a regra de expiração do próprio bucket, e o `b2 sync` do script nunca apaga.
 
-Na VPS ficam os 5 últimos backups em `~/backups/omni-b2/` e o resultado em
-`~/backups/omni-b2/status/backup-latest.json` e `restore-latest.json` (a cópia local antes de
-publicar fica separada, em `~/backups/omni/`).
+O resultado de cada execução fica em `~/backups/omni-b2/status/backup-latest.json` e o do ensaio em
+`restore-latest.json`.
 
 ## O que cada backup guarda
 
@@ -40,9 +54,9 @@ Os arquivos do SharePoint (anexos, gravações arquivadas) já ficam fora da VPS
 
 ## Configurar (uma vez)
 
-1. **Backblaze (painel ou CLI de quem administra a conta):** bucket privado `filtrovali-omni`, regras de
-   expiração por prefixo (`hourly-db/` 7 dias, `daily/` 60 dias, `monthly/` 365 dias) e uma chave
-   **só desse bucket e sem apagar**:
+1. **Backblaze (painel ou CLI de quem administra a conta):** bucket privado `filtrovali-omni`, as
+   regras de expiração da tabela acima (`daily/` oculta em 7 dias, `monthly/` em 60; apagar 1 dia
+   depois de ocultar) e uma chave **só desse bucket e sem apagar**:
 
    ```bash
    b2 key create --bucket filtrovali-omni omni-backup listBuckets,listFiles,readFiles,writeFiles
@@ -78,24 +92,29 @@ Os arquivos do SharePoint (anexos, gravações arquivadas) já ficam fora da VPS
 
    No ensaio: `"status": "SUCCESS"`, `"secrets": "conferidos"` e `hoursSinceLastSync` baixo.
 
-5. **Cron do `omni`** (`crontab -e`, como `omni`). Horários no relógio da VPS (UTC: o diário roda às
-   23h20 de Brasília). Os minutos :20 e :50 não coincidem com o cron do filtroAPP.
+5. **Cron do `omni`** (`crontab -e`, como `omni`). A VPS está em `Etc/UTC` e o crontab não define
+   `TZ`: os horários são UTC. Antes de instalar, confira `crontab -l` para não duplicar linhas.
 
    ```cron
-   # De hora em hora (menos 01h e 02h): só os bancos -> hourly-db/ (7 dias)
-   20 0,3-23 * * * B2_URI=b2://filtrovali-omni/hourly-db INCLUDE_VOLUMES=false INCLUDE_SECRETS=false /home/omni/apps/Omni/deploy/backup-prod.sh >> /home/omni/logs/backup-omni.log 2>&1
-   # Todo dia 02h20: completo -> daily/ (60 dias)
+   # Cópia local completa: 00h20, 03h20, 08h20, 13h20, 18h20 e 23h20 UTC; sem envio; guarda 2.
+   20 0,3-23/5 * * * BACKUP_LOCK_TIMEOUT_SECONDS=0 LOCAL_BACKUP_KEEP=2 /home/omni/apps/Omni/deploy/backup-prod.sh >> /home/omni/logs/backup-omni.log 2>&1
+
+   # Diário completo às 02h20 UTC; espera até 2h pelo lock.
    20 2 * * * B2_URI=b2://filtrovali-omni/daily BACKUP_LOCK_TIMEOUT_SECONDS=7200 /home/omni/apps/Omni/deploy/backup-prod.sh >> /home/omni/logs/backup-omni.log 2>&1
-   # Dia 1, 01h20: completo -> monthly/ (365 dias)
+
+   # Mensal completo no dia 1 às 01h20 UTC; espera até 2h pelo lock.
    20 1 1 * * B2_URI=b2://filtrovali-omni/monthly BACKUP_LOCK_TIMEOUT_SECONDS=7200 /home/omni/apps/Omni/deploy/backup-prod.sh >> /home/omni/logs/backup-omni.log 2>&1
-   # Dia 2, 04h50: ensaio de restauração do último diário
+
+   # Ensaio de restauração no dia 2 às 04h50 UTC, a partir do último diário.
    50 4 2 * * /home/omni/apps/Omni/deploy/restore-drill.sh >> /home/omni/logs/restore-drill-omni.log 2>&1
    ```
 
-   Sem aviso por e-mail ou Telegram na produção: uma falha fica no log e no JSON de status
-   (`~/backups/omni-b2/status/`). O alerta que chega a uma pessoa é a entrega E09 (alerta de erro),
-   que vai ler esses JSON. Os scripts ainda aceitam `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` se um dia
-   voltarem.
+   Sem aviso por e-mail ou Telegram na produção. Quem avisa é o worker do Omni (job `saude-operacao`,
+   de hora em hora, com `OPERACAO_STATUS=ligado`): ele lê `~/backups/omni-b2/status/` (montado só
+   para leitura em `/ops-status`) e, se uma execução falhar, se o último envio ao B2
+   (`backup-remoto-latest.json`) passar de 26 h ou se o ensaio passar de 35 dias, registra um erro
+   do sistema, que vira aviso no sino e no celular de quem é admin (Administração → Erros). Os
+   scripts ainda aceitam `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` se um dia voltarem.
 
    Os scripts rodam da pasta do repositório: uma publicação (`deploy/publicar.sh`) os atualiza junto
    com o código.
