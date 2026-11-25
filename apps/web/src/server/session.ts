@@ -7,19 +7,22 @@ import { clientIp, parseCookies, serializeCookie } from "./http.ts";
 export const SESSION_COOKIE = "omni_session";
 
 /** Sessão do pedido, mesmo sem o termo de uso aceito (só para a página do termo e para getMe). */
-export async function sessaoDoRequest(request: Request): Promise<{ personId: string; termosPendentes: boolean } | null> {
+export async function sessaoDoRequest(
+  request: Request,
+): Promise<{ personId: string; termosPendentes: boolean; senhaPendente: boolean; acesso: "microsoft" | "interno" } | null> {
   const token = parseCookies(request.headers.get("cookie")).get(SESSION_COOKIE);
   return resolveSessionComTermos(getPool(), token, TERMOS.versao);
 }
 
 /**
- * Pessoa da sessão, só com o termo de uso da versão atual aceito (0051). Sem o
- * aceite, devolve null: nenhuma função, download ou evento do Omni abre até a
- * pessoa aceitar em /termos.
+ * Pessoa da sessão, só com o termo de uso da versão atual aceito (0051) e, no login
+ * interno, com a senha provisória já trocada (0078). Faltando um dos dois, devolve
+ * null: nenhuma função, download ou evento do Omni abre até a pessoa resolver
+ * (/conta/senha e /termos usam sessaoDoRequest).
  */
 export async function personIdFromRequest(request: Request): Promise<string | null> {
   const s = await sessaoDoRequest(request);
-  return s && !s.termosPendentes ? s.personId : null;
+  return s && !s.termosPendentes && !s.senhaPendente ? s.personId : null;
 }
 
 export function sessionTokenFromRequest(request: Request): string | undefined {

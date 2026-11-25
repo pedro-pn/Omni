@@ -2,7 +2,7 @@ import { PERFIS, type PerfilCodigo } from "@omni/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { definirAtivo, definirPerfis, listPessoas, type PessoaAdmin } from "../../lib/admin-fns.ts";
+import { criarAcessoInterno, definirAtivo, definirPerfis, listPessoas, redefinirSenhaInterna, type PessoaAdmin } from "../../lib/admin-fns.ts";
 import { definirPermissaoGravacao } from "../../lib/whatsapp-fns.ts";
 import { Aviso, mensagemDeErro } from "./ui.tsx";
 
@@ -37,6 +37,15 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
     onSettled: atualizar,
   });
 
+  const [senhaMostrada, setSenhaMostrada] = useState<{ nome: string; login: string; senha: string } | null>(null);
+  const redefinir = useMutation({
+    mutationFn: (p: PessoaAdmin) => redefinirSenhaInterna({ data: { personId: p.id } }).then((r) => ({ nome: p.displayName, login: p.interno!.login, senha: r.senha })),
+    onMutate: () => setErro(null),
+    onSuccess: setSenhaMostrada,
+    onError: (e) => setErro(mensagemDeErro(e)),
+    onSettled: atualizar,
+  });
+
   if (pessoas.isPending) return <p className="text-muted">Carregando pessoas…</p>;
   if (pessoas.isError) return <Aviso tipo="erro">{mensagemDeErro(pessoas.error)}</Aviso>;
 
@@ -59,6 +68,8 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
         sozinha.
       </p>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
+      {souAdmin && <NovoAcessoInterno aoCriar={(x) => (setSenhaMostrada(x), atualizar())} />}
+      {senhaMostrada && <SenhaProvisoria {...senhaMostrada} fechar={() => setSenhaMostrada(null)} />}
       <input
         type="search"
         value={busca}
@@ -81,8 +92,11 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
                 <p className="text-xs text-muted">
                   Termo de uso: {p.termoAceitoEm ? `aceito em ${ultimoAcesso(p.termoAceitoEm)}` : "ainda não aceito"}
                 </p>
-                {(p.entra || p.inativoPor) && (
+                {(p.entra || p.inativoPor || p.interno) && (
                   <p className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+                    {p.interno && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">Login interno: {p.interno.login} · sem e-mail</span>}
+                    {p.interno?.senhaProvisoria && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">Ainda com a senha provisória</span>}
+                    {p.interno?.bloqueadaAte && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-vermelho">Bloqueada por tentativas erradas</span>}
                     {p.entra === "atribuida" && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">Liberada no Entra</span>}
                     {p.entra === "fora" && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-vermelho">Fora do app no Entra</span>}
                     {p.inativoPor === "entra" && <span className="rounded-sm bg-superficie-2 px-1.5 py-0.5 text-muted">Desativada pelo Entra (volta sozinha se for atribuída de novo)</span>}
@@ -130,10 +144,102 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
               Pode gravar as próprias ligações do WhatsApp
               <span className="text-xs text-muted">(em cada ligação, só com o aviso aos participantes; a gravação é só dela)</span>
             </label>
+            {p.interno && souAdmin && (
+              <button
+                type="button"
+                disabled={redefinir.isPending || !p.active}
+                onClick={() => confirm(`Gerar uma senha provisória nova para ${p.displayName}? A senha atual deixa de valer e as sessões abertas saem.`) && redefinir.mutate(p)}
+                className="mt-3 rounded-md border border-linha px-3 py-1.5 text-sm font-medium hover:bg-superficie-2 disabled:opacity-60"
+              >
+                Redefinir senha
+              </button>
+            )}
           </li>
         ))}
         {lista.length === 0 && <p className="text-muted">Ninguém encontrado.</p>}
       </ul>
     </section>
+  );
+}
+
+/** Criar o acesso de quem não tem conta Microsoft da empresa (só admin). */
+function NovoAcessoInterno({ aoCriar }: { aoCriar: (x: { nome: string; login: string; senha: string }) => void }) {
+  const [aberto, setAberto] = useState(false);
+  const [nome, setNome] = useState("");
+  const [login, setLogin] = useState("");
+  const criar = useMutation({
+    mutationFn: () => criarAcessoInterno({ data: { nome, login } }),
+    onSuccess: (r) => {
+      aoCriar({ nome, login: r.login, senha: r.senha });
+      setNome("");
+      setLogin("");
+      setAberto(false);
+    },
+  });
+  if (!aberto)
+    return (
+      <button type="button" onClick={() => setAberto(true)} className="rounded-md border border-floresta px-3 py-1.5 text-sm font-medium text-floresta-texto hover:bg-floresta-clara">
+        Criar acesso sem Microsoft
+      </button>
+    );
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        criar.mutate();
+      }}
+      className="space-y-3 rounded-lg border border-linha bg-superficie p-4"
+    >
+      <p className="font-medium">Acesso sem Microsoft</p>
+      <p className="text-sm text-muted">
+        Para quem não tem conta Microsoft da Filtrovali: entra com usuário e senha e usa tudo do Omni, menos o e-mail. Depois de criar, marque os perfis
+        e as funções como de qualquer pessoa.
+      </p>
+      <label className="block">
+        <span className="text-sm font-medium">Nome</span>
+        <input required minLength={2} value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2" />
+      </label>
+      <label className="block">
+        <span className="text-sm font-medium">Usuário</span>
+        <input
+          required
+          value={login}
+          onChange={(e) => setLogin(e.target.value.toLowerCase())}
+          pattern="[a-z0-9][a-z0-9._\-]{2,39}"
+          autoCapitalize="none"
+          spellCheck={false}
+          placeholder="ex.: joao.campo"
+          className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2"
+        />
+        <span className="mt-1 block text-xs text-muted">3 a 40 letras minúsculas, números, ponto, hífen ou sublinhado.</span>
+      </label>
+      {criar.isError && <Aviso tipo="erro">{mensagemDeErro(criar.error)}</Aviso>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={criar.isPending} className="rounded-md bg-floresta px-3 py-1.5 text-sm font-medium text-white hover:bg-floresta-escura disabled:opacity-60">
+          {criar.isPending ? "Criando…" : "Criar e gerar a senha"}
+        </button>
+        <button type="button" onClick={() => setAberto(false)} className="rounded-md px-3 py-1.5 text-sm hover:bg-superficie-2">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** A senha provisória aparece uma vez só: quem administra passa à pessoa, que troca no primeiro acesso. */
+function SenhaProvisoria({ nome, login, senha, fechar }: { nome: string; login: string; senha: string; fechar: () => void }) {
+  return (
+    <div role="status" className="space-y-2 rounded-lg border border-floresta bg-floresta-clara p-4 text-floresta-texto">
+      <p className="font-medium">Acesso de {nome}</p>
+      <p className="text-sm">
+        Usuário: <strong className="font-mono">{login}</strong> · Senha provisória: <strong className="font-mono select-all">{senha}</strong>
+      </p>
+      <p className="text-xs">
+        Anote e passe à pessoa por um canal seguro: esta senha não aparece de novo. No primeiro acesso, ela troca por uma só dela.
+      </p>
+      <button type="button" onClick={fechar} className="rounded-md border border-floresta px-3 py-1 text-sm font-medium hover:bg-superficie">
+        Já anotei
+      </button>
+    </div>
   );
 }

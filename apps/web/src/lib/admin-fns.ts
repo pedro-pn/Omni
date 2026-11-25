@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { nationalHolidays, PERFIS, type PerfilCodigo, TERMOS } from "@omni/core";
 import { schema, type Db } from "@omni/db";
 import { createServerFn } from "@tanstack/react-start";
@@ -37,6 +39,8 @@ export type PessoaAdmin = {
   termoAceitoEm: string | null;
   /** Pode gravar as próprias ligações do WhatsApp (permissão da pessoa, 0032). */
   podeGravar: boolean;
+  /** Login interno (0078): usuário, se ainda está com a senha provisória e até quando está bloqueada. null = conta Microsoft. */
+  interno: { login: string; senhaProvisoria: boolean; bloqueadaAte: string | null } | null;
 };
 
 export const listPessoas = createServerFn({ method: "GET" }).handler(async (): Promise<PessoaAdmin[]> =>
@@ -46,6 +50,12 @@ export const listPessoas = createServerFn({ method: "GET" }).handler(async (): P
     const gravam = new Set((await db.select().from(schema.whatsappCallPermissions).where(eq(schema.whatsappCallPermissions.canRecord, true))).map((g) => g.personId));
     const aceites = new Map(
       (await db.select().from(schema.termsAcceptances).where(eq(schema.termsAcceptances.versao, TERMOS.versao))).map((a) => [a.personId, a.aceitoEm.toISOString()]),
+    );
+    const internos = new Map(
+      (await db.execute<{ person_id: string; login: string; must_change: boolean; locked_until: string | Date | null }>(sql`SELECT * FROM app.logins_internos()`)).rows.map((x) => [
+        x.person_id,
+        { login: x.login, senhaProvisoria: x.must_change, bloqueadaAte: x.locked_until && new Date(x.locked_until) > new Date() ? new Date(x.locked_until).toISOString() : null },
+      ]),
     );
     const porPessoa = new Map<string, PerfilCodigo[]>();
     for (const p of perfis) porPessoa.set(p.personId, [...(porPessoa.get(p.personId) ?? []), p.profile]);
@@ -61,6 +71,7 @@ export const listPessoas = createServerFn({ method: "GET" }).handler(async (): P
       inativoPor: p.active ? null : p.inativoPor,
       termoAceitoEm: aceites.get(p.id) ?? null,
       podeGravar: gravam.has(p.id),
+      interno: internos.get(p.id) ?? null,
     }));
   }),
 );
@@ -125,6 +136,63 @@ export const definirAtivo = createServerFn({ method: "POST" })
       if (alteradas.length === 0) throw new AdminError("Você não tem permissão para essa alteração.");
       await auditar(db, meuId, data.active ? "pessoa.reativada" : "pessoa.desativada", "person", data.personId);
       return { ok: true };
+    }),
+  );
+
+// ---------------------------------------------------------------- login interno (0078)
+
+/** Senha provisória legível (sem 0/O, 1/l/I), com letras e números; mostrada uma vez a quem administra. */
+function senhaProvisoria(): string {
+  const letras = "abcdefghjkmnpqrstuvwxyz";
+  const numeros = "23456789";
+  const sorteio = (base: string, n: number) => Array.from(randomBytes(n), (b) => base[b % base.length]).join("");
+  return `${sorteio(letras, 4)}-${sorteio(numeros, 4)}-${sorteio(letras, 4)}`;
+}
+
+const erroDoBanco = (error: unknown) => String((error as Error & { cause?: Error }).cause?.message ?? (error as Error).message);
+
+/** Cria a pessoa com login interno (sem conta Microsoft) e devolve a senha provisória, uma vez. */
+export const criarAcessoInterno = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      nome: z.string().trim().min(2, "Digite o nome.").max(120),
+      login: z
+        .string()
+        .trim()
+        .toLowerCase()
+        .regex(/^[a-z0-9][a-z0-9._-]{2,39}$/, "Usuário: 3 a 40 letras minúsculas, números, ponto, hífen ou sublinhado."),
+    }),
+  )
+  .handler(async ({ data }): Promise<{ personId: string; login: string; senha: string }> =>
+    comoAdministrador(async (db) => {
+      const senha = senhaProvisoria();
+      try {
+        const [r] = (await db.execute<{ id: string }>(sql`SELECT app.criar_acesso_interno(${data.nome}, ${data.login}, ${senha}) AS id`)).rows;
+        return { personId: r!.id, login: data.login, senha };
+      } catch (error) {
+        const causa = erroDoBanco(error);
+        if (/usuário já existe/.test(causa)) throw new AdminError("Esse usuário já existe. Escolha outro.");
+        if (/sem permissão/.test(causa)) throw new AdminError("Só quem tem o perfil de administração cria acessos internos.");
+        throw error;
+      }
+    }),
+  );
+
+/** Nova senha provisória para uma conta interna (a pessoa troca no próximo acesso; as sessões abertas saem). */
+export const redefinirSenhaInterna = createServerFn({ method: "POST" })
+  .validator(z.object({ personId: z.uuid() }))
+  .handler(async ({ data }): Promise<{ senha: string }> =>
+    comoAdministrador(async (db) => {
+      const senha = senhaProvisoria();
+      try {
+        await db.execute(sql`SELECT app.redefinir_senha_interna(${data.personId}::uuid, ${senha})`);
+        return { senha };
+      } catch (error) {
+        const causa = erroDoBanco(error);
+        if (/sem permissão/.test(causa)) throw new AdminError("Só quem tem o perfil de administração redefine senhas.");
+        if (/não é uma conta interna/.test(causa)) throw new AdminError("Essa pessoa entra pela Microsoft.");
+        throw error;
+      }
     }),
   );
 

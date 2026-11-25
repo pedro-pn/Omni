@@ -46,14 +46,33 @@ export async function resolveSessionComTermos(
   pool: pg.Pool,
   token: string | undefined | null,
   versaoTermos: string,
-): Promise<{ personId: string; termosPendentes: boolean } | null> {
+): Promise<{ personId: string; termosPendentes: boolean; senhaPendente: boolean; acesso: "microsoft" | "interno" } | null> {
   if (!token || token.length > 128) return null;
-  const { rows } = await pool.query<{ person_id: string; termos_pendentes: boolean }>("SELECT * FROM app.sessao_com_termos($1, $2)", [
-    hashSessionToken(token),
-    versaoTermos,
-  ]);
+  const { rows } = await pool.query<{ person_id: string; termos_pendentes: boolean; senha_pendente: boolean; acesso: "microsoft" | "interno" }>(
+    "SELECT * FROM app.sessao_com_termos($1, $2)",
+    [hashSessionToken(token), versaoTermos],
+  );
   const r = rows[0];
-  return r ? { personId: r.person_id, termosPendentes: r.termos_pendentes } : null;
+  return r ? { personId: r.person_id, termosPendentes: r.termos_pendentes, senhaPendente: r.senha_pendente, acesso: r.acesso } : null;
+}
+
+export type ResultadoLoginInterno = "ok" | "trocar_senha" | "invalido" | "bloqueado" | "desativada";
+
+/** Login interno (0078): a senha é conferida no banco; abre sessão só se der certo. */
+export async function loginInterno(
+  pool: pg.Pool,
+  input: { login: string; senha: string; userAgent?: string | null; ip?: string | null; ttlHours?: number },
+): Promise<{ resultado: ResultadoLoginInterno; personId: string | null; token: string | null }> {
+  const token = newSessionToken();
+  const ttl = `${input.ttlHours ?? SESSION_TTL_HOURS} hours`;
+  const ip = input.ip && isIP(input.ip) ? input.ip : null;
+  const { rows } = await pool.query<{ person_id: string | null; resultado: ResultadoLoginInterno }>(
+    "SELECT * FROM app.login_interno($1, $2, $3, $4::interval, $5, $6::inet)",
+    [input.login, input.senha, hashSessionToken(token), ttl, input.userAgent ?? null, ip],
+  );
+  const r = rows[0];
+  const ok = r?.resultado === "ok" || r?.resultado === "trocar_senha";
+  return { resultado: r?.resultado ?? "invalido", personId: ok ? r!.person_id : null, token: ok ? token : null };
 }
 
 export async function resolveSession(pool: pg.Pool, token: string | undefined | null): Promise<string | null> {

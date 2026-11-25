@@ -57,6 +57,8 @@ export const people = pgTable("people", {
   entraAtribuido: boolean("entra_atribuido"),
   entraSincronizadoEm: timestamp("entra_sincronizado_em", { withTimezone: true }),
   inativoPor: text("inativo_por", { enum: ["entra", "admin"] }),
+  /** Como entra (0078): conta Microsoft da empresa ou login interno (usuário e senha). */
+  acesso: text("acesso", { enum: ["microsoft", "interno"] }).notNull().default("microsoft"),
 });
 
 export const personProfiles = pgTable(
@@ -1491,3 +1493,15 @@ export const taskAttachments = pgTable("task_attachments", {
     focoId: uuid("foco_id").unique(),
 });
 
+/** Login interno (0078): sem privilégios para os papéis; só as funções app.*_interno leem e mudam. */
+export const internalCredentials = pgTable("internal_credentials", {
+  personId: uuid("person_id").primaryKey().references(() => people.id, { onDelete: "cascade" }),
+  login: text("login").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  mustChange: boolean("must_change").notNull().default(true),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by").references(() => people.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

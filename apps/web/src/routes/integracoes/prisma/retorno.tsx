@@ -14,6 +14,7 @@ export const Route = createFileRoute("/integracoes/prisma/retorno")({
   beforeLoad: async () => {
     const me = await getMe();
     if (!me) throw redirect({ to: "/entrar" });
+    if (me.senhaPendente) throw redirect({ to: "/conta/senha" });
     if (me.termosPendentes) throw redirect({ to: "/termos" });
   },
   head: () => ({ meta: [{ title: "Conectando ao Prisma · Omni" }] }),

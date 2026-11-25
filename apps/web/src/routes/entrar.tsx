@@ -10,6 +10,8 @@ const ERROS: Record<string, string> = {
   "login-invalido": "O login expirou. Tente de novo.",
   "conta-desativada": "Sua conta está desativada no Omni. Fale com a diretoria.",
   "dados-invalidos": "Confira o e-mail e o nome.",
+  "interno-invalido": "Usuário ou senha não conferem.",
+  "interno-bloqueado": "Muitas tentativas erradas. Espere 15 minutos e tente de novo.",
   "falha-login": "Não foi possível entrar. Tente de novo.",
 };
 
@@ -39,7 +41,7 @@ function Entrar() {
         />
         <div className="rounded-lg bg-superficie p-6 shadow-sm">
           <h1 className="text-lg font-semibold">Entrar no Omni</h1>
-          <p className="mt-1 text-muted">Use a sua conta Microsoft da Filtrovali.</p>
+          <p className="mt-1 text-muted">Use a sua conta Microsoft da Filtrovali ou o usuário que a Administração criou para você.</p>
 
           {mensagem && (
             <p role="alert" className="mt-4 rounded-md border border-vermelho/40 px-3 py-2 text-vermelho">
@@ -57,6 +59,33 @@ function Entrar() {
           ) : (
             <p className="mt-5 text-muted">O login Microsoft ainda não está configurado neste ambiente.</p>
           )}
+
+          <form method="post" action="/auth/interno" className="mt-6 border-t border-linha pt-5">
+            <input type="hidden" name="volta" value={volta} />
+            <p className="text-sm font-medium">Sem conta Microsoft</p>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium">Usuário</span>
+              <input
+                name="login"
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2"
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium">Senha</span>
+              <input name="senha" type="password" required autoComplete="current-password" className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2" />
+            </label>
+            <button
+              type="submit"
+              className="mt-4 w-full rounded-md border border-floresta px-4 py-2 font-medium text-floresta-texto hover:bg-floresta-clara"
+            >
+              Entrar com usuário e senha
+            </button>
+            <p className="mt-2 text-xs text-muted">Esqueceu a senha? Peça uma nova à Administração do Omni.</p>
+          </form>
 
           {options.dev && (
             <form method="post" action="/auth/dev" className="mt-6 border-t border-linha pt-5">
