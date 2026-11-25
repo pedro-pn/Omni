@@ -29,3 +29,4 @@ export * from "./riscos.ts";
 export * from "./contatos.ts";
 export * from "./modulos.ts";
 export * from "./erros.ts";
+export * from "./limites.ts";
