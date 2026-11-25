@@ -3,7 +3,7 @@
 #   docker build --target worker -t omni-worker .
 #   docker build --target migrate -t omni-migrate .
 
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
@@ -20,7 +20,7 @@ COPY apps/web apps/web
 RUN npm run build -w @omni/web
 
 # ---- web: só a saída do nitro (servidor Node autocontido)
-FROM node:24-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /app
 # Commit publicado (deploy/publicar.sh passa); /api/saude devolve, para conferir o deploy.
 ARG OMNI_VERSAO=desconhecida
