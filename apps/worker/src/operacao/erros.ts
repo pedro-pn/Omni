@@ -62,7 +62,8 @@ export async function avisarErros(db: Db, agora = new Date()): Promise<Resultado
     ).rows.map((x) => x.id);
     for (const e of aAvisar) {
       r.erros += 1;
-      const onde = e.origem === "operacao" ? "Backup" : `${e.origem === "web" ? "Web" : "Worker"} · ${e.local}`;
+      const onde =
+        e.origem === "operacao" ? (e.local === "ia" ? "Gasto da IA" : "Backup") : `${e.origem === "web" ? "Web" : "Worker"} · ${e.local}`;
       const titulo = `Erro no Omni: ${onde}`.slice(0, 200);
       const corpo = `${e.mensagem}${e.ocorrencias > 1 ? ` (${e.ocorrencias} vezes)` : ""}`.slice(0, 500);
       const janela = Math.floor(agora.getTime() / 3_600_000);

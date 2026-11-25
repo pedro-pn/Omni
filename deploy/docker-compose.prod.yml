@@ -108,6 +108,9 @@ services:
       IA_ALERTAS: ${IA_ALERTAS:-desligada}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      # Teto diário da IA (E11): tokens e chamadas por dia, somados no banco (web e worker)
+      IA_TETO_TOKENS_DIA: ${IA_TETO_TOKENS_DIA:-2000000}
+      IA_TETO_CHAMADAS_DIA: ${IA_TETO_CHAMADAS_DIA:-3000}
       WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
       # Chamadas pessoais do WhatsApp (perfil "chamadas"): serviço de voz pela rede interna
       CHAMADAS_HABILITADAS: ${CHAMADAS_HABILITADAS:-off}
@@ -144,6 +147,9 @@ services:
       # IA v2 (ADR 0005): leitura dos RDOs, resumo de reuniões e alertas pedidos à IA (todas desligadas por padrão)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      # Teto diário da IA (E11): tokens e chamadas por dia, somados no banco (web e worker)
+      IA_TETO_TOKENS_DIA: ${IA_TETO_TOKENS_DIA:-2000000}
+      IA_TETO_CHAMADAS_DIA: ${IA_TETO_CHAMADAS_DIA:-3000}
       IA_LEITURA_RDO: ${IA_LEITURA_RDO:-desligada}
       IA_RESUMO_REUNIAO: ${IA_RESUMO_REUNIAO:-desligada}
       IA_ALERTAS: ${IA_ALERTAS:-desligada}

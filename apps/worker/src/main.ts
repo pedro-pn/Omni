@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { createPool, createWorkerDb } from "@omni/db";
 import { FiltroAppClient } from "@omni/integrations/filtroapp";
 import { GraphClient } from "@omni/integrations/graph";
-import { OpenAiClient } from "@omni/integrations/openai";
 import { EvolutionClient } from "@omni/integrations/whatsapp";
 import { PrismaClient } from "@omni/integrations/prisma";
 import { PgBoss } from "pg-boss";
@@ -42,6 +41,7 @@ import { vincularPelasAssinaturas } from "./contatos/assinaturas.ts";
 import { enviarAvisosPorEmail, enviarResumoSemanal, type EnviarEmail } from "./tarefas/emails.ts";
 import { vigiarRiscos } from "./seguranca/riscos.ts";
 import { avisarErros, conferirOperacao, registrarErroDoWorker } from "./operacao/erros.ts";
+import { conferidorDoTeto, openAiComTeto } from "./operacao/teto-ia.ts";
 
 /**
  * Worker do Omni. Filas pg-boss com política `exclusive` (nunca duas execuções
@@ -103,6 +103,9 @@ process.on("uncaughtException", (erro) => {
   console.error("[worker] exceção não tratada:", erro);
   void registrarErroDoWorker(db, erro, "processo").finally(() => process.exit(1));
 });
+
+// Teto diário da IA (E11): todo cliente da OpenAI do worker confere o gasto do dia antes de chamar.
+const tetoIa = conferidorDoTeto(db, { tokens: env.IA_TETO_TOKENS_DIA, chamadas: env.IA_TETO_CHAMADAS_DIA });
 
 const log = (job: string, dados: object) => console.log(JSON.stringify({ job, at: new Date().toISOString(), ...dados }));
 
@@ -258,13 +261,13 @@ if (env.GRAPH_TENANT_ID && env.GRAPH_CLIENT_ID && env.GRAPH_PRIVATE_KEY_PATH && 
   if (appLogin) await tarefa("entra-pessoas", "12 * * * *", () => sincronizarPessoasDoEntra(db, graph, appLogin));
   else console.warn("[worker] ENTRA_CLIENT_ID não definido: a lista de Pessoas não é lida do Entra");
   if (env.IA_ASSINATURAS === "ligada" && env.OPENAI_API_KEY) {
-    const llmAssinaturas = new OpenAiClient({ apiKey: env.OPENAI_API_KEY });
+    const llmAssinaturas = openAiComTeto(env.OPENAI_API_KEY, tetoIa);
     const ler = async (caixa: string, id: string) => (await graph.mensagem(caixa, id)).body?.content ?? null;
     await tarefa("ia-assinaturas", "7,37 * * * *", () => lerAssinaturas(db, ler, llmAssinaturas, { modelo: env.OPENAI_MODEL }));
   }
   // Caixa única: o telefone conferido na assinatura liga o e-mail ao WhatsApp do contato.
   await tarefa("agenda-assinaturas", "17,47 * * * *", () => vincularPelasAssinaturas(db));
-  const llmReunioes = env.IA_RESUMO_REUNIAO === "ligada" && env.OPENAI_API_KEY ? new OpenAiClient({ apiKey: env.OPENAI_API_KEY }) : null;
+  const llmReunioes = env.IA_RESUMO_REUNIAO === "ligada" && env.OPENAI_API_KEY ? openAiComTeto(env.OPENAI_API_KEY, tetoIa) : null;
   await tarefa("teams-reunioes", "3,18,33,48 * * * *", async () => ({
     agenda: await syncReunioes(db, graph),
     resumos: await resumirReunioes(db, graph, llmReunioes, await carregarCalendario(db, env.TZ_EMPRESA), { modelo: env.OPENAI_MODEL }),
@@ -283,7 +286,7 @@ if (env.WHATSAPP_EVOLUTION_URL && env.WHATSAPP_EVOLUTION_KEY) {
 }
 
 // Leitura dos RDOs: as regras do regime rodam sempre; o LLM só com IA_LEITURA_RDO=ligada e a chave.
-const llm = env.IA_LEITURA_RDO === "ligada" && env.OPENAI_API_KEY ? new OpenAiClient({ apiKey: env.OPENAI_API_KEY }) : null;
+const llm = env.IA_LEITURA_RDO === "ligada" && env.OPENAI_API_KEY ? openAiComTeto(env.OPENAI_API_KEY, tetoIa) : null;
 await tarefa(
   "ia-leitura-rdos",
   "0 7 * * 1-6",
@@ -292,7 +295,7 @@ await tarefa(
 );
 
 // Alertas pedidos à IA: a leitura usa o LLM (IA_ALERTAS); os disparos já decididos são publicados sempre.
-const llmAlertas = env.IA_ALERTAS === "ligada" && env.OPENAI_API_KEY ? new OpenAiClient({ apiKey: env.OPENAI_API_KEY }) : null;
+const llmAlertas = env.IA_ALERTAS === "ligada" && env.OPENAI_API_KEY ? openAiComTeto(env.OPENAI_API_KEY, tetoIa) : null;
 await tarefa("ia-alertas", "*/15 * * * *", async () => ({
   conferencia: llmAlertas ? await conferirAlertas(db, llmAlertas, { modelo: env.OPENAI_MODEL }) : "IA_ALERTAS desligada",
   publicacao: await publicarDisparos(db, await carregarCalendario(db, env.TZ_EMPRESA)),
@@ -333,7 +336,7 @@ if (graphGeral && env.GRAPH_ANEXOS_DRIVE_ID && env.CHAMADAS_SERVICO_URL && env.C
 
 // Resumo das ligações gravadas: precisa da IA ligada, da chave da OpenAI e do serviço de voz.
 if (env.IA_RESUMO_CHAMADA === "ligada" && env.OPENAI_API_KEY && env.CHAMADAS_SERVICO_URL && env.CHAMADAS_SERVICO_KEY) {
-  const openai = new OpenAiClient({ apiKey: env.OPENAI_API_KEY });
+  const openai = openAiComTeto(env.OPENAI_API_KEY, tetoIa);
   const doServico = buscarAudioNoServico(env.CHAMADAS_SERVICO_URL, env.CHAMADAS_SERVICO_KEY);
   const sp = graphGeral;
   // Já arquivada: M4A do SharePoint → WAV mono para a transcrição.
