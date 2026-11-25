@@ -5,7 +5,7 @@
 #   deploy/publicar.sh staging                 # publica origin/master no staging
 #   deploy/publicar.sh producao                # publica origin/master na produção
 #   deploy/publicar.sh producao <commit>       # publica um commit específico (ex.: voltar versão)
-#   deploy/publicar.sh producao --sem-backup   # só enquanto o backup automático não existir
+#   deploy/publicar.sh producao --sem-backup   # pula a cópia local do banco (só em emergência)
 #   OMNI_DIR=~/apps/Omni sh /tmp/publicar.sh producao   # rodando de uma cópia do script
 #
 # Passos: confere a árvore limpa → backup do banco → guarda as imagens atuais → leva o código ao

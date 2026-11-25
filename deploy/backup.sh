@@ -4,12 +4,13 @@
 # Uso, na pasta do repositório na VPS:
 #   deploy/backup.sh omni-staging deploy/.env.staging      # staging
 #   deploy/backup.sh omni deploy/.env.production           # produção
-# Guarda em /var/backups/<projeto>/ e apaga os com mais de 14 dias. Agende no cron
-# (ex.: 03:15 todo dia) e copie a pasta para fora da VPS.
+# Cópia local rápida, feita pelo deploy/publicar.sh antes de cada publicação (volta de versão com
+# migration). Guarda em ~/backups/<projeto>/ (ou BACKUP_DIR) e apaga as com mais de 14 dias.
+# O backup para fora da VPS (B2, horário/diário/mensal) é o deploy/backup-prod.sh: docs/producao/backup.md.
 set -eu
 PROJETO="${1:?projeto (omni ou omni-staging)}"
 ENVFILE="${2:?arquivo .env do ambiente}"
-DESTINO="/var/backups/${PROJETO}"
+DESTINO="${BACKUP_DIR:-${HOME}/backups/${PROJETO}}"
 QUANDO="$(date +%Y%m%d-%H%M)"
 COMPOSE="docker compose -p ${PROJETO} -f deploy/docker-compose.prod.yml --env-file ${ENVFILE}"
 umask 077

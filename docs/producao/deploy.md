@@ -206,20 +206,20 @@ curl -s -o /dev/null -w '%{http_code}\n' http://172.17.0.1:8088/internal/control
 # Atualizar para a versão nova: backup, build com a versão, migrations, conferência de /api/saude
 # e volta automática se a versão nova não responder (registro em ~/omni-publicacoes.log)
 deploy/publicar.sh staging            # ou: deploy/publicar.sh producao
-# Enquanto o backup automático não existir (/var/backups sem permissão): --sem-backup
+# Antes de publicar, o script faz uma cópia local do banco em ~/backups/<projeto> (deploy/backup.sh).
 
 # Logs, reiniciar, parar
 omni-stg logs -f --tail 100 web worker
 omni-stg restart worker
 omni-stg stop                     # para sem apagar nada;  "down -v" APAGA o banco — só para descartar o ambiente
 
-# Backup diário (banco do Omni e, se estiver no ar, o da Evolution), guardando 14 dias em /var/backups/omni-staging
+# Cópia local do banco na hora (a mesma que o publicar.sh faz), em ~/backups/omni-staging
 deploy/backup.sh omni-staging deploy/.env.staging
-# crontab -e →  15 3 * * *  cd ~/omni && deploy/backup.sh omni-staging deploy/.env.staging >> ~/backup-omni.log 2>&1
+# Backup para fora da VPS (B2, horário/diário/mensal) e ensaio de restauração: docs/producao/backup.md
 
 # Restaurar um backup (com o web e o worker parados)
 omni-stg stop web worker
-omni-stg exec -T postgres pg_restore -U postgres -d omni --clean --if-exists < /var/backups/omni-staging/omni-AAAAMMDD-HHMM.dump
+omni-stg exec -T postgres pg_restore -U postgres -d omni --clean --if-exists < ~/backups/omni-staging/omni-AAAAMMDD-HHMM.dump
 omni-stg up -d --wait
 ```
 
