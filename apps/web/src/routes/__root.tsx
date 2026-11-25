@@ -4,10 +4,9 @@ import { createRootRouteWithContext, HeadContent, Link, Outlet, Scripts } from "
 import type { ReactNode } from "react";
 
 import { CamadaChamadas } from "../components/chamadas/CamadaChamadas.tsx";
+import { SCRIPT_INICIAL } from "../lib/script-inicial.ts";
 import appCss from "../styles.css?url";
 
-// Aplica o tema salvo antes da primeira pintura (evita piscar). Sem localStorage, segue o sistema.
-const themeBootstrap = `try{var t=localStorage.getItem("omni-tema");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}`;
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -40,7 +39,7 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_INICIAL }} />
         <HeadContent />
       </head>
       <body>
