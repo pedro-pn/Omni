@@ -43,6 +43,13 @@ B2_ENV_FILE="${B2_ENV_FILE:-/root/.config/omni-backup/b2.env}"
 # Chave do B2 só do bucket do Omni, separada da do filtroAPP (o b2 guarda a conta autorizada nesse arquivo).
 export B2_ACCOUNT_INFO="${B2_ACCOUNT_INFO:-/root/.config/omni-backup/b2_account_info}"
 LOCAL_BACKUP_KEEP="${LOCAL_BACKUP_KEEP:-5}"
+# O Omni roda no Docker rootless do usuário omni, não no Docker do sistema (o do filtroAPP).
+# O root fala com ele pelo socket do usuário.
+OMNI_DOCKER_USER="${OMNI_DOCKER_USER:-omni}"
+if [ -z "${DOCKER_HOST:-}" ] && id "$OMNI_DOCKER_USER" > /dev/null 2>&1; then
+  DOCKER_HOST="unix:///run/user/$(id -u "$OMNI_DOCKER_USER")/docker.sock"
+fi
+export DOCKER_HOST
 BACKUP_NICE_LEVEL="${BACKUP_NICE_LEVEL:-19}"
 BACKUP_DOCKER_CPUS="${BACKUP_DOCKER_CPUS:-0.5}"
 
@@ -96,6 +103,11 @@ prune_local_backups() {
     rm -rf -- "${BACKUP_ROOT:?}/$name"
   done
 }
+
+case "${DOCKER_HOST:-}" in
+  unix://*) [ -S "${DOCKER_HOST#unix://}" ] || { echo "[backup] socket do Docker não encontrado: $DOCKER_HOST (o usuário $OMNI_DOCKER_USER está com o Docker rootless no ar?)" >&2; false; } ;;
+esac
+docker inspect "${PROJETO}-postgres-1" > /dev/null 2>&1 || { echo "[backup] o Postgres do Omni (${PROJETO}-postgres-1) não aparece em $DOCKER_HOST" >&2; false; }
 
 umask 077
 mkdir -p "$BACKUP_ROOT"

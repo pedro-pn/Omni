@@ -12,6 +12,11 @@ ensaio de restauração mensal. Bucket próprio: **`filtrovali-omni`** (privado)
 
 Os minutos (:20 e :50) ficam fora dos horários do filtroAPP para os dois não rodarem juntos.
 
+**Docker rootless:** o Omni roda no Docker do usuário `omni` (`/run/user/<uid>/docker.sock`, com
+*linger* ligado), não no Docker do sistema, que é o do filtroAPP. O `backup-prod.sh` roda como root e
+aponta para esse socket sozinho (`OMNI_DOCKER_USER=omni`). O ensaio de restauração usa o Docker do
+sistema, porque o banco descartável não precisa do Omni.
+
 Na VPS ficam os 5 últimos backups em `/root/backups/omni/` e o resultado em
 `/root/backups/omni/status/backup-latest.json` e `restore-latest.json`.
 
