@@ -1,0 +1,62 @@
+# Blocos para o Caddyfile persistente do proxy compartilhado
+# (filtroAPP-main/deploy/infra-proxy). Publicar o DNS antes de adicionar cada bloco.
+# Passo a passo: docs/producao/deploy.md.
+
+# --- Omni (staging; Docker publica em 172.17.0.1:8085) ----------------------
+omnistaging.filtrovali.com.br {
+	encode zstd gzip
+	# Áudio das chamadas (WebSocket) direto no serviço de voz; só este caminho (porta 8088).
+	handle /omni/audio {
+		reverse_proxy host.docker.internal:8088
+	}
+	handle {
+		reverse_proxy host.docker.internal:8085
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+}
+
+# --- Omni (produção; Docker publica em 172.17.0.1:8084) ---------------------
+omni.filtrovali.com.br {
+	encode zstd gzip
+	# Áudio das chamadas (WebSocket) direto no serviço de voz; só este caminho (porta 8086).
+	handle /omni/audio {
+		reverse_proxy host.docker.internal:8086
+	}
+	handle {
+		reverse_proxy host.docker.internal:8084
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+}
+
+# ---------------------------------------------------------------------------
+# CORTE DO FOCO — NÃO ATIVAR antes do dia do corte.
+# Ver docs/producao/entrada-em-producao.md §2 (por que proxy só na API e 308 no resto).
+#
+# foco.filtrovali.com.br {
+# 	encode zstd gzip
+# 	@servidor path /api/v1/* /api/prisma-authorization/* /api/calendar/apple/feed/*
+# 	handle @servidor {
+# 		reverse_proxy host.docker.internal:8084
+# 	}
+# 	handle {
+# 		redir https://omni.filtrovali.com.br{uri} 308
+# 	}
+# 	header {
+# 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+# 		X-Content-Type-Options "nosniff"
+# 		-Server
+# 	}
+# }

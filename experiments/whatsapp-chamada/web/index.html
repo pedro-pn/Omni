@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Omni · Prova de chamadas</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">OMNI · LABORATÓRIO</p><h1>Chamadas pelo WhatsApp</h1><p>Prova de conceito · um número e uma chamada por vez</p></div><span id="mode" class="badge">Carregando</span></header>
+    <p id="notice" class="notice">No modo simulado, o áudio fica neste computador. Use fones para evitar retorno.</p>
+    <div class="grid">
+      <section aria-labelledby="line-heading">
+        <p class="eyebrow">01 · CONEXÃO</p><h2 id="line-heading">Linha de teste</h2>
+        <p id="connection" role="status">Carregando…</p>
+        <p id="connection-message" class="muted"></p>
+        <img id="qr" alt="QR code para parear a linha de teste" width="260" height="260" hidden>
+        <button id="connect">Conectar linha</button>
+        <p class="muted" id="allowed"></p>
+      </section>
+      <section aria-labelledby="call-heading">
+        <p class="eyebrow">02 · ÁUDIO E CHAMADA</p><h2 id="call-heading">Fale pelo navegador</h2>
+        <button id="microphone">Ativar microfone</button><span id="audio-status" class="muted">Microfone desligado</span>
+        <form id="dial-form">
+          <label for="peer">Destino de teste, com DDI</label><input id="peer" name="peer" inputmode="tel" placeholder="55 + DDD + número" pattern="[1-9][0-9]{9,14}" required>
+          <label class="checkbox"><input id="notified" type="checkbox">Os participantes foram avisados de que o teste será gravado.</label>
+          <div class="actions"><button id="dial" type="submit">Ligar</button><button id="incoming" type="button" class="secondary">Simular recebimento</button></div>
+        </form>
+        <label id="test-tone-label" class="checkbox"><input id="test-tone" type="checkbox">Reproduzir tom de teste (simulação)</label>
+        <div class="call-state" aria-live="polite"><strong id="call-state">Nenhuma chamada</strong><p id="call-peer"></p><p id="call-metrics" class="muted"></p></div>
+        <div class="actions"><button id="answer" hidden>Atender e gravar</button><button id="reject" class="danger" hidden>Rejeitar</button><button id="hangup" class="danger" disabled>Encerrar</button><button id="mute" class="secondary" disabled>Silenciar</button></div>
+      </section>
+      <section aria-labelledby="evolution-heading">
+        <p class="eyebrow">03 · CONVIVÊNCIA</p><h2 id="evolution-heading">Evolution</h2>
+        <p>Confira antes, durante e depois da chamada. Envie e receba as mensagens de teste pelo Omni e pelo celular.</p>
+        <button id="diagnose" class="secondary" disabled>Consultar Evolution</button>
+        <p id="evolution-help" class="muted">Consultas de leitura, sem alterar a instância.</p>
+        <ol id="diagnostics"></ol>
+      </section>
+      <section aria-labelledby="recordings-heading">
+        <p class="eyebrow">04 · RESULTADO</p><h2 id="recordings-heading">Gravações deste teste</h2>
+        <p class="muted">Ouça os dois participantes nos dois lados do fone.</p>
+        <div id="recordings"><p>Nenhuma chamada concluída.</p></div>
+        <p id="retention" class="muted"></p>
+        <a class="button secondary" href="/api/report" download>Baixar relatório do teste</a>
+      </section>
+    </div>
+    <p id="error" role="alert" hidden></p>
+    <footer>Teste local · A validação com WhatsApp depende do pareamento e de chamadas com os aparelhos de teste.</footer>
+  </main>
+</body>
+</html>

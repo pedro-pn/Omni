@@ -1,0 +1,155 @@
+@import "tailwindcss";
+@import "@fontsource/poppins/400.css";
+@import "@fontsource/poppins/500.css";
+@import "@fontsource/poppins/600.css";
+@import "@fontsource/poppins/700.css";
+
+/*
+ * Tokens da marca: identidade-visual/design-system/tokens.json.
+ * Claro no :root; escuro por preferência do sistema ou por [data-theme="dark"].
+ */
+:root {
+  --floresta: #30503a;
+  --floresta-escura: #243d2c;
+  --floresta-clara: #e2eae4;
+  --floresta-texto: #30503a;
+  --nuvens: #e8e8e8;
+  --azul: #11437e;
+  --vermelho: #c81519;
+  --lilas: #9b93a8;
+  --fundo: #e8e8e8;
+  --superficie: #ffffff;
+  --superficie-2: #f4f4f4;
+  --linha: #dcdcdc;
+  --ink: #1b211d;
+  --muted: #5f6661;
+  /* Plano de fundo das conversas (0061): cores da lista, com versão escura. */
+  --fundo-areia: #efe7dc;
+  --fundo-menta: #dcefe3;
+  --fundo-ceu: #dbe9f5;
+  --fundo-lavanda: #e6e1f2;
+  --fundo-rosa: #f5e0e6;
+  --fundo-pessego: #f8e3d3;
+  --fundo-cinza: #e3e5e4;
+  --fundo-grafite: #c9cecb;
+  --fundo-traco: rgb(0 0 0 / 0.07);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --floresta-clara: #22342a;
+    --floresta-texto: #8fbf9d;
+    --azul: #8bb0e0;
+    --vermelho: #ff6b6e;
+    --fundo: #0f1210;
+    --superficie: #171b18;
+    --superficie-2: #1d221e;
+    --linha: #2c332e;
+    --ink: #e8e8e8;
+    --muted: #a0a7a2;
+    --fundo-areia: #26221c;
+    --fundo-menta: #17271d;
+    --fundo-ceu: #16222e;
+    --fundo-lavanda: #211d2b;
+    --fundo-rosa: #2b1c21;
+    --fundo-pessego: #2d2119;
+    --fundo-cinza: #1b1e1c;
+    --fundo-grafite: #0b0d0c;
+    --fundo-traco: rgb(255 255 255 / 0.06);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --floresta-clara: #22342a;
+  --floresta-texto: #8fbf9d;
+  --azul: #8bb0e0;
+  --vermelho: #ff6b6e;
+  --fundo: #0f1210;
+  --superficie: #171b18;
+  --superficie-2: #1d221e;
+  --linha: #2c332e;
+  --ink: #e8e8e8;
+  --muted: #a0a7a2;
+  --fundo-areia: #26221c;
+  --fundo-menta: #17271d;
+  --fundo-ceu: #16222e;
+  --fundo-lavanda: #211d2b;
+  --fundo-rosa: #2b1c21;
+  --fundo-pessego: #2d2119;
+  --fundo-cinza: #1b1e1c;
+  --fundo-grafite: #0b0d0c;
+  --fundo-traco: rgb(255 255 255 / 0.06);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --color-floresta: var(--floresta);
+  --color-floresta-escura: var(--floresta-escura);
+  --color-floresta-clara: var(--floresta-clara);
+  --color-floresta-texto: var(--floresta-texto);
+  --color-azul: var(--azul);
+  --color-vermelho: var(--vermelho);
+  --color-lilas: var(--lilas);
+  --color-fundo: var(--fundo);
+  --color-superficie: var(--superficie);
+  --color-superficie-2: var(--superficie-2);
+  --color-linha: var(--linha);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 21px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Campos com 16px no celular evitam o zoom automático do iOS. */
+@media (max-width: 760px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+.rotulo {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* Na camada base: as classes (ex.: outline-none num campo dentro de outro) podem sobrescrever. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--azul);
+    outline-offset: 2px;
+  }
+}
+
+/* Tela principal (AppShell): a página não rola, só as colunas. */
+html.tela-unica,
+html.tela-unica body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+

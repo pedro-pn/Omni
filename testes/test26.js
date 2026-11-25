@@ -1,0 +1,16 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:950}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c1]');await p.click('[data-act=channel][data-ch=mail]');
+await p.click('[data-act=showCc]');await p.type('#rcp-cc','luci');await p.waitForTimeout(100);await p.screenshot({path:'ii1.png'});await p.press('#rcp-cc','Enter');
+await p.click('[data-act=showBcc]');await p.type('#rcp-bcc','laercio');await p.press('#rcp-bcc','Enter');
+await p.click('#msg');await p.type('#msg','Olá Pedro, segue a resposta. ');await p.type('#msg','@marc');await p.waitForTimeout(100);await p.screenshot({path:'ii2.png'});
+await p.press('#msg','Enter');await p.type('#msg','vai acompanhar.');
+await p.click('[data-act=attachMail]');await p.fill('#amQ','medição');await p.click('.am-it:not([hidden]) >> nth=0');
+await p.click('.sig-prev summary');await p.screenshot({path:'ii3.png'});
+await p.click('[data-act=send]');await p.waitForTimeout(100);
+await p.click('.card.mail-card.out >> nth=-1 >> [data-act=toggleOpen]');await p.evaluate(()=>{const e=[...document.querySelectorAll('.card.mail-card.out')].pop();e.scrollIntoView({block:'end'})});await p.screenshot({path:'ii4.png'});
+console.log(errs);await b.close();})();

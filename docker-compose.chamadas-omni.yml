@@ -1,0 +1,21 @@
+name: omni-chamadas
+services:
+  voz:
+    image: omni-chamada-poc:dev
+    build: ./experiments/whatsapp-chamada
+    network_mode: host
+    env_file: ./experiments/whatsapp-chamada/.env.omni
+    environment:
+      CHAMADA_OMNI: "on"
+      CHAMADA_DADOS: /data
+      CHAMADA_ESCUTAR: 127.0.0.1:8098
+      # 1 = registra por onde a chamada passou e por que foi ignorada (sem áudio; números mascarados)
+      CHAMADA_DIAGNOSTICO: ${CHAMADA_DIAGNOSTICO:-0}
+    volumes: ["chamadas-omni-data:/data"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    stop_grace_period: 10s
+volumes:
+  chamadas-omni-data:

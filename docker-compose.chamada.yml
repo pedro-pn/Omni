@@ -1,0 +1,23 @@
+# Linux: host network mantém o bind em 127.0.0.1 e permite consultar a Evolution
+# local, sem conectar este experimento às redes ou volumes do Omni.
+name: omni-chamada-poc
+services:
+  chamada:
+    image: omni-chamada-poc:dev
+    build: ./experiments/whatsapp-chamada
+    network_mode: host
+    env_file:
+      - path: ./experiments/whatsapp-chamada/.env
+        required: false
+    environment:
+      CHAMADA_DADOS: /data
+    volumes:
+      - chamada-poc-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    pids_limit: 100
+    stop_grace_period: 10s
+volumes:
+  chamada-poc-data:

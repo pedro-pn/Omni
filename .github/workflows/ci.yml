@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: omni
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d omni"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      CI: "true"
+      PGPASSWORD: postgres_ci
+      OMNI_OWNER_PASSWORD: omni_owner_dev
+      OMNI_APP_PASSWORD: omni_app_dev
+      OMNI_WORKER_PASSWORD: omni_worker_dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+
+      # Falha conhecida alta ou crítica nas dependências de produção barra o merge (pilar 8.4).
+      - name: Auditar dependências
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Preparar papéis e banco de teste
+        run: |
+          sudo apt-get install -y --no-install-recommends postgresql-client >/dev/null
+          export POSTGRES_USER=postgres POSTGRES_DB=omni PGHOST=localhost PGPORT=5433
+          sh deploy/postgres/init/01-roles.sh
+          psql -v ON_ERROR_STOP=1 -U postgres -d omni -f deploy/postgres/dev/02-test-db.sql
+
+      # O build gera apps/web/src/routeTree.gen.ts, necessário para a checagem de tipos.
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test

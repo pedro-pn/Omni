@@ -1,0 +1,47 @@
+{
+  "name": "omni",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Omni — tela única da Filtrovali (WhatsApp, Outlook, SharePoint, Teams, Prisma, tarefas e Missões)",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @omni/web",
+    "dev:worker": "npm run dev -w @omni/worker",
+    "build": "npm run build -w @omni/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
+    "db:down": "docker compose -f docker-compose.dev.yml down",
+    "whatsapp:up": "docker compose -f docker-compose.whatsapp.yml up -d --build --wait",
+    "whatsapp:down": "docker compose -f docker-compose.whatsapp.yml down",
+    "chamada:poc": "sh experiments/whatsapp-chamada/run.sh",
+    "chamada:docker": "docker compose -f docker-compose.chamada.yml up --build",
+    "chamada:test": "cd experiments/whatsapp-chamada && go test -race ./...",
+    "db:migrate": "npm run migrate -w @omni/db",
+    "db:seed-dev": "npm run seed-dev -w @omni/db",
+    "db:ficticios": "npm run ficticios -w @omni/db --",
+    "abrir": "npx --yes serve prototipo -l 4321",
+    "testar": "node testes/run-all.js",
+    "ia:avaliar": "npm run ia:avaliar -w @omni/worker --",
+    "e2e": "vitest run --config e2e/vitest.config.ts",
+    "carga": "tsx apps/web/scripts/carga.ts",
+    "foco:importar": "npm run foco:importar -w @omni/worker --"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "playwright": "^1.64.1",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@azure/msal-node": "7.1.2"
+  }
+}

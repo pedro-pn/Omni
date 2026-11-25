@@ -1,0 +1,24 @@
+{
+  "name": "@omni/db",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "migrate": "tsx --env-file-if-exists=../../.env src/cli/migrate.ts",
+    "seed-dev": "tsx --env-file-if-exists=../../.env src/cli/seed-dev.ts",
+    "ficticios": "tsx --env-file-if-exists=../../.env src/cli/ficticios.ts"
+  },
+  "dependencies": {
+    "@omni/core": "*",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15"
+  }
+}

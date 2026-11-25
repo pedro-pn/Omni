@@ -1,0 +1,23 @@
+{
+  "name": "@omni/integrations",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./filtroapp": "./src/filtroapp/index.ts",
+    "./prisma": "./src/prisma/index.ts",
+    "./graph": "./src/graph/index.ts",
+    "./openai": "./src/openai/index.ts",
+    "./whatsapp": "./src/whatsapp/index.ts",
+    "./gravacoes": "./src/gravacoes/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0"
+  }
+}

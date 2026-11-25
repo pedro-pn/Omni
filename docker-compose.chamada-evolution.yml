@@ -1,0 +1,18 @@
+# Override EXPERIMENTAL da Evolution local do Omni. Um único processo mantém a
+# sessão. Nunca subir outra Evolution usando os mesmos volumes/banco em paralelo.
+# Veja experiments/whatsapp-chamada/evolution-bridge/README.md.
+services:
+  evolution:
+    image: omni-evolution:2.3.7-chamada-poc
+    build: ./experiments/whatsapp-chamada/evolution-bridge
+    environment:
+      OMNI_CHAMADA_PONTE: ${OMNI_CHAMADA_PONTE:-teste}
+      # No modo omni, a linha vem da sessão autenticada de cada usuário.
+      OMNI_CHAMADA_LINHA: ${CHAMADA_LINHA_TESTE:-}
+      OMNI_CHAMADA_NUMEROS: ${CHAMADA_NUMEROS_TESTE:?defina os destinos de teste}
+      OMNI_CHAMADA_TOKEN: ${CHAMADA_PONTE_TOKEN:?gere a chave local da ponte}
+      OMNI_CHAMADA_PORTA: "8097"
+      # Dentro do contêiner; publicação exclusivamente no loopback do host.
+      OMNI_CHAMADA_BIND: 0.0.0.0
+    ports:
+      - "127.0.0.1:8097:8097"

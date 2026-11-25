@@ -1,0 +1,70 @@
+{
+ "v": 3,
+ "layout": "files",
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-25T16:17:57Z"
+ },
+ "title": "Filtrovali",
+ "namespace": "Filtrovali",
+ "libraries": [],
+ "sections": {},
+ "groups": [
+  "Logos"
+ ],
+ "assetGroups": {
+  "Logos": {
+   "name": "Logos",
+   "tile": "l",
+   "order": [
+    "filtrovali-logo-horizontal-color.png",
+    "filtrovali-logo-horizontal-white.png",
+    "filtrovali-simbolo-color.png",
+    "filtrovali-simbolo-white.png",
+    "exemplo-icone-foco.png"
+   ],
+   "files": {
+    "filtrovali-logo-horizontal-color.png": {
+     "name": "filtrovali-logo-horizontal-color.png",
+     "blob": "442f352fa85d96a107f21c95831a61e9",
+     "size": 61634,
+     "type": "image/png"
+    },
+    "filtrovali-logo-horizontal-white.png": {
+     "name": "filtrovali-logo-horizontal-white.png",
+     "blob": "d954d532e82cd239addf6a0b270d9fd2",
+     "size": 63356,
+     "type": "image/png"
+    },
+    "filtrovali-simbolo-color.png": {
+     "name": "filtrovali-simbolo-color.png",
+     "blob": "6c7d08dc516985dd80019e9fc8ff8e3e",
+     "size": 48059,
+     "type": "image/png"
+    },
+    "filtrovali-simbolo-white.png": {
+     "name": "filtrovali-simbolo-white.png",
+     "blob": "bb1f9b71e4bf7029e59e7e4422fb43bb",
+     "size": 47969,
+     "type": "image/png"
+    },
+    "exemplo-icone-foco.png": {
+     "name": "exemplo-icone-foco.png",
+     "blob": "f46cf5d9265b78fee2cca5804524ca55",
+     "size": 180171,
+     "type": "image/png"
+    }
+   }
+  }
+ },
+ "blobs": {},
+ "docs": {
+  "sections": []
+ },
+ "lastChange": {
+  "by": "Otávio Barcelos",
+  "at": "2026-10-25T16:17:57Z",
+  "via": "Claude (Cowork)",
+  "note": "Sistema criado a partir do brand book do Estúdio Molina e dos logos do Foco"
+ }
+}

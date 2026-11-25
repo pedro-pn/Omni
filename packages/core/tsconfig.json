@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"],
+  // Testes portados do Foco ficam como no original (escritos sem noUncheckedIndexedAccess).
+  "exclude": ["src/tarefas/*.test.ts"]
+}

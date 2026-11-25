@@ -1,0 +1,110 @@
+# Evolution (WhatsApp por QR code) do Omni para desenvolvimento — ADR 0004.
+# Separada do banco do Omni (npm run db:up) e da Evolution do Prisma: banco,
+# Redis e chave geral próprios. Sobe com `npm run whatsapp:up`.
+#
+# Lê do .env da raiz: WHATSAPP_EVOLUTION_KEY (chave geral da Evolution, a mesma
+# que o Omni usa para chamá-la). A API só escuta em 127.0.0.1:8085 e o painel
+# da Evolution não é usado: o pareamento é feito pela Administração do Omni.
+name: omni-whatsapp
+
+services:
+  evolution:
+    build: ./deploy/evolution
+    image: omni-evolution:2.3.7-presence.1
+    restart: unless-stopped
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      SERVER_URL: http://localhost:8085
+      AUTHENTICATION_API_KEY: ${WHATSAPP_EVOLUTION_KEY:?defina WHATSAPP_EVOLUTION_KEY no .env}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:evolution_dev@evolution-postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: omni_whatsapp
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      # O histórico do pareamento fica só aqui; o navegador do dono do número baixa para o aparelho (o Omni não copia).
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: omni_whatsapp
+      CACHE_REDIS_SAVE_INSTANCES: "true"
+      CACHE_LOCAL_ENABLED: "false"
+      # A Evolution 2.3.7 recusa chamadas sem Origin se o CORS tiver lista; a chave continua obrigatória.
+      CORS_ORIGIN: "*"
+      CORS_CREDENTIALS: "false"
+      LOG_LEVEL: ERROR,WARN
+      LOG_BAILEYS: error
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      RABBITMQ_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+      SQS_ENABLED: "false"
+      CHATWOOT_ENABLED: "false"
+      TYPEBOT_ENABLED: "false"
+      N8N_ENABLED: "false"
+      OPENAI_ENABLED: "false"
+      DEL_INSTANCE: "false"
+      LANGUAGE: pt-BR
+    ports:
+      - "127.0.0.1:8085:8080"
+    # O webhook chama o Omni que roda fora do Docker (npm run dev).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - evolution_sessions:/evolution/instances
+    depends_on:
+      evolution-postgres: { condition: service_healthy }
+      evolution-redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+
+  # O Omni de desenvolvimento escuta só em 127.0.0.1:3000 (o login de desenvolvimento
+  # não pode ficar exposto). Este repasse escuta só na ponte do Docker (172.17.0.1:3999)
+  # e entrega no 127.0.0.1:3000; só os contêineres desta máquina o alcançam.
+  webhook-repasse:
+    image: alpine/socat:1.8.0.3
+    restart: unless-stopped
+    network_mode: host
+    command: ["TCP-LISTEN:3999,bind=172.17.0.1,fork,reuseaddr", "TCP:127.0.0.1:3000"]
+
+  evolution-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution_dev
+    # Porta local só para inspecionar o banco da Evolution em desenvolvimento.
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  evolution-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - evolution_cache:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  evolution_sessions:
+  evolution_pg:
+  evolution_cache:

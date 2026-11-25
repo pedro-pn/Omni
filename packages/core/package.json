@@ -1,0 +1,15 @@
+{
+  "name": "@omni/core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.tarefas-testes.json"
+  },
+  "dependencies": {
+    "@date-fns/tz": "^1.5.0"
+  }
+}

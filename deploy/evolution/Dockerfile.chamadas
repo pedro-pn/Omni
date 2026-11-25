@@ -1,0 +1,35 @@
+# Evolution do Omni na produção/staging: o mesmo patch de presença do Dockerfile
+# ao lado + a ponte das chamadas pessoais (experiments/whatsapp-chamada/evolution-bridge).
+# A ponte fica inerte sem OMNI_CHAMADA_PONTE: a imagem serve com ou sem chamadas.
+# Build pelo compose de produção (contexto adicional "ponte").
+FROM evoapicloud/evolution-api:v2.3.7@sha256:1bd8afc4a6cf48822e6cf02469aeae7bd35a12a6b616eacd1291926307f4d339
+COPY patch-presence.mjs presence.test.mjs /tmp/omni-presence/
+RUN node /tmp/omni-presence/patch-presence.mjs \
+    && node --check /evolution/node_modules/baileys/lib/Socket/socket.js \
+    && node /tmp/omni-presence/presence.test.mjs \
+    && rm -r /tmp/omni-presence
+# Nome da agenda do celular nos contatos que já existiam (o Omni mostrava só o número).
+COPY patch-contatos.mjs contatos.test.mjs /tmp/omni-contatos/
+RUN node /tmp/omni-contatos/patch-contatos.mjs \
+    && node --check /evolution/dist/main.mjs \
+    && node /tmp/omni-contatos/contatos.test.mjs \
+    && rm -r /tmp/omni-contatos
+# Liga o @lid ao número na lista de contatos (nome da agenda nas conversas que chegam pelo @lid).
+COPY patch-lid.mjs lid.test.mjs /tmp/omni-lid/
+RUN node /tmp/omni-lid/patch-lid.mjs \
+    && node --check /evolution/dist/main.mjs \
+    && node /tmp/omni-lid/lid.test.mjs \
+    && rm -r /tmp/omni-lid
+COPY --from=ponte *.mjs /evolution/node_modules/baileys/lib/omni-chamada/
+RUN node /evolution/node_modules/baileys/lib/omni-chamada/patch.mjs \
+    && node --check /evolution/node_modules/baileys/lib/Socket/index.js \
+    && node --check /evolution/node_modules/baileys/lib/Socket/messages-recv.js \
+    && node -e 'import("/evolution/node_modules/baileys/lib/index.js").then(() => console.log("BRIDGE_MODULE_LOAD_OK"))' \
+    && node --test /evolution/node_modules/baileys/lib/omni-chamada/bridge.test.mjs
+LABEL com.filtrovali.patch="baileys-partial-credential-presence-1"
+LABEL com.filtrovali.patch-contatos="evolution-contact-names-1"
+LABEL com.filtrovali.patch-lid="evolution-lid-mapping-1"
+LABEL com.filtrovali.ponte="chamadas-omni-producao-1"
+LABEL com.filtrovali.app="omni"
+# Travas do Omni: chave geral forte e senha do banco; com a ponte ligada, token forte.
+ENTRYPOINT ["/bin/bash", "-c", "if [ ${#AUTHENTICATION_API_KEY} -lt 32 ]; then echo 'AUTHENTICATION_API_KEY ausente ou curta (mínimo 32)'; exit 1; fi; case \"$DATABASE_CONNECTION_URI\" in *evolution:@*) echo 'senha do banco da Evolution ausente'; exit 1;; esac; if [ -n \"$OMNI_CHAMADA_PONTE\" ] && [ ${#OMNI_CHAMADA_TOKEN} -lt 32 ]; then echo 'OMNI_CHAMADA_TOKEN ausente ou curto (mínimo 32)'; exit 1; fi; . ./Docker/scripts/deploy_database.sh && npm run start:prod"]

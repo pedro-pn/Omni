@@ -1,0 +1,49 @@
+name: Avaliação da IA
+
+# Roda os casos de avaliação da leitura dos RDOs no modelo (OpenAI) quando as
+# instruções, os casos ou o cliente mudam — e à mão, para comparar modelos.
+# Precisa do segredo OPENAI_API_KEY no repositório (Settings → Secrets → Actions);
+# sem ele, avisa e não falha. Custo por rodada: centavos (10 RDOs fictícios).
+on:
+  push:
+    branches: [master]
+    paths:
+      - packages/core/src/ia/rdo.ts
+      - apps/worker/src/ia/avaliacao-rdos.json
+      - apps/worker/src/ia/avaliar-leitura-rdos.ts
+      - packages/integrations/src/openai/**
+  pull_request:
+    paths:
+      - packages/core/src/ia/rdo.ts
+      - apps/worker/src/ia/avaliacao-rdos.json
+      - apps/worker/src/ia/avaliar-leitura-rdos.ts
+      - packages/integrations/src/openai/**
+  workflow_dispatch:
+    inputs:
+      modelo:
+        description: "Modelo (vazio = OPENAI_MODEL do repositório ou o padrão)"
+        required: false
+
+jobs:
+  avaliar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+    steps:
+      - name: Sem a chave da OpenAI
+        if: env.OPENAI_API_KEY == ''
+        run: echo "::warning::OPENAI_API_KEY não está nos segredos do repositório; a avaliação da IA não rodou."
+      - uses: actions/checkout@v4
+        if: env.OPENAI_API_KEY != ''
+      - uses: actions/setup-node@v4
+        if: env.OPENAI_API_KEY != ''
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+        if: env.OPENAI_API_KEY != ''
+      - name: Avaliar a leitura dos RDOs
+        if: env.OPENAI_API_KEY != ''
+        run: npm run ia:avaliar -- ${{ inputs.modelo }}

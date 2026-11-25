@@ -1,0 +1,21 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const run=async(path)=>{const p=await b.newPage({viewport:{width:1440,height:950}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c7]');
+const last='.ai-msg:last-of-type ';
+await p.click('#info [data-act=simMgrMsg]');await p.waitForTimeout(1500);
+if(path==='partial'){ await p.click('#info [data-act=aiNext]'); await p.waitForTimeout(80);
+  await p.click(last+'[data-v=yes]'); await p.fill(last+'input[type=number]','90000'); await p.fill(last+'[id$=-ap]','2026-11-05'); await p.click(last+'[data-v=yesSave]');
+  await p.click('#info [data-act=aiNext]'); await p.click(last+'[data-v=apYes]'); await p.click(last+'[data-v=fullNo]'); await p.click(last+'[data-v=nextNo]'); await p.fill(last+'textarea','UG4 retirada do escopo pelo cliente'); await p.click(last+'[data-v=whySave]');
+} else { await p.click(last+'[data-v=no]'); await p.fill(last+'[id$=-md]','2026-10-28'); await p.fill(last+'[id$=-ap2]','2026-11-03'); await p.click(last+'[data-v=noSave]');
+  await p.click('#info [data-act=aiNext]'); await p.click(last+'[data-v=apYes]'); }
+await p.waitForTimeout(100);
+await p.click(last+'[data-v=nfYes]'); await p.fill(last+'[id$=-n]','NF 2451'); await p.click(last+'[data-v=nfYesSave]');
+await p.click('#info [data-act=aiNext]'); await p.click(last+'[data-v=clear]');await p.waitForTimeout(100);
+await p.screenshot({path:'cc-'+path+'.png'});
+await p.evaluate(()=>{const e=[...document.querySelectorAll('#info .block')].find(b=>b.textContent.includes('Encerramento da missão'));e.scrollIntoView();});await p.screenshot({path:'cc-'+path+'-panel.png'});
+console.log(path,errs); await p.close();};
+await run('partial'); await run('full'); await b.close();})();

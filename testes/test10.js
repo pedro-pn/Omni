@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c7]');await p.click('[data-act=info]');await p.click('[data-act=layer][data-v=mgmt]');await p.waitForTimeout(100);
+await p.hover('.wk >> nth=3');await p.screenshot({path:'n1.png'});
+await p.evaluate(()=>document.getElementById('stream').scrollTop=700);await p.screenshot({path:'n2.png'});
+await p.click('[data-act=mgAdd][data-k=inc]');await p.fill('#mgX','Técnico torceu o pé na escada de acesso à UG3.');await p.click('[data-act=mgSave]');await p.waitForTimeout(100);
+const m=await (await b.newContext({viewport:{width:390,height:820},hasTouch:true,isMobile:true})).newPage();m.on('pageerror',e=>errs.push(e.message));
+await m.goto('file://'+require('os').tmpdir()+'/central-t.html');await m.waitForTimeout(300);await m.click('.row[data-id=c7]');await m.click('[data-act=layer][data-v=mgmt]');await m.screenshot({path:'n3.png'});
+console.log(errs, await m.evaluate(()=>document.documentElement.scrollWidth));await b.close();})();

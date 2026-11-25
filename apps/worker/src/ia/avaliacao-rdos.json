@@ -1,0 +1,15 @@
+{
+  "descricao": "Casos fictícios (sem dados reais) para avaliar a leitura dos RDOs. 'esperado' = tipos que o modelo deve apontar; [] = rotina, não deve apontar nada.",
+  "casos": [
+    { "id": "rotina-1", "texto": "Início 07h30. Filtragem do sistema hidráulico da prensa 3 em andamento, contagem de partículas dentro do esperado. Serviço executado conforme planejado, sem ocorrências.", "esperado": [] },
+    { "id": "rotina-2", "texto": "Montagem das mangueiras e da unidade de filtragem. Teste de estanqueidade aprovado. Equipe completa, DDS realizado às 07h15 sobre trabalho em altura.", "esperado": [] },
+    { "id": "bomba", "texto": "Flushing da linha de pressão. Às 09h40 a bomba de transferência B-01 apresentou vazamento no selo e foi desligada. Equipe aguardando selo novo da sede.", "esperado": ["equipamento_parado"] },
+    { "id": "pt", "texto": "Equipe chegou às 07h, mas a permissão de trabalho só foi liberada pelo cliente às 10h30. Serviço de limpeza química iniciado depois da liberação.", "esperado": ["cliente_travando"] },
+    { "id": "adicional", "texto": "Concluída a filtragem do tanque principal. A pedido do coordenador de manutenção do cliente, iniciamos também o flushing do circuito da laminadora 2, que não estava previsto.", "esperado": ["servico_adicional"] },
+    { "id": "material", "texto": "Troca dos elementos filtrantes da unidade móvel. Acabaram os elementos de 3 micra, a filtragem fina ficou suspensa até chegar a reposição.", "esperado": ["falta_material"] },
+    { "id": "seguranca", "texto": "Durante a desmontagem do flange, um auxiliar teve respingo de óleo quente no antebraço. Primeiros socorros no ambulatório do cliente, sem afastamento. Reforçado o uso de luva e manga.", "esperado": ["seguranca"] },
+    { "id": "varios", "texto": "Aguardamos andaime por toda a manhã (responsabilidade do cliente). À tarde, a mangueira de retorno rompeu e o serviço parou até a substituição.", "esperado": ["cliente_travando", "equipamento_parado"] },
+    { "id": "chuva", "texto": "Chuva forte das 13h às 15h, serviço externo interrompido por segurança conforme orientação do cliente. Retomado às 15h20.", "esperado": [] },
+    { "id": "prazo", "texto": "Contagem de partículas não baixou como esperado após 3 dias de filtragem (ISO 21/19/16). Será necessário estender a filtragem, o que afeta o prazo combinado.", "esperado": ["outro_risco"] }
+  ]
+}

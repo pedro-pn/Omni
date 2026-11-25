@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:950}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c1]');await p.waitForTimeout(100);await p.screenshot({path:'hh1.png'});
+await p.hover('.msg.in >> nth=-1');await p.click('.msg.in >> nth=-1 >> .pz-btn');await p.screenshot({path:'hh2.png'});await p.click('[data-act=pzSave]');
+await p.click('[data-act=pzBulk]');await p.click('[data-act=pzSave]');
+await p.click('[data-act=profile]');await p.waitForTimeout(100);await p.screenshot({path:'hh3.png'});
+await p.click('.row[data-id=c7]');await p.click('[data-act=pzBulk]');await p.click('[data-act=pzSave]');
+await p.click('[data-act=profile]');await p.click('[data-act=profile]');
+console.log(errs, await p.evaluate(()=>document.querySelectorAll('.pz-ok').length));await b.close();})();

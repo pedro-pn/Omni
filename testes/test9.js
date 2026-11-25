@@ -1,0 +1,11 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c7]');await p.waitForTimeout(100);await p.screenshot({path:'r1.png'});
+await p.selectOption('.role-sel[data-role=field]','Carlos Souza');await p.waitForTimeout(100);
+await p.click('[data-act=announceRoles]');await p.waitForTimeout(200);await p.screenshot({path:'r2.png'});
+await p.click('[data-act=layer][data-v=mail]');await p.screenshot({path:'r3.png'});
+console.log(errs);await b.close();})();

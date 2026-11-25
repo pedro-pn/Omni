@@ -1,0 +1,17 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1600,height:1000}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('[data-act=view][data-v=review]');await p.click('[data-act=openMgmt][data-id=c7]');await p.waitForTimeout(150);
+if(await p.evaluate(()=>document.getElementById('app').classList.contains('info-open'))) await p.click('.chat-head [data-act=info]');
+await p.screenshot({path:'q1.png'});
+await p.evaluate(()=>document.querySelector('.ac-grid').scrollIntoView());await p.screenshot({path:'q2.png'});
+await p.evaluate(()=>document.getElementById('mg-rev').scrollIntoView());
+await p.fill('#nextVal','130');await p.fill('#nextNote','Compensar a S43');await p.check('#nextWa');await p.click('[data-act=saveNext]');await p.waitForTimeout(100);
+await p.click('[data-act=closeReview]');await p.waitForTimeout(100);await p.screenshot({path:'q3.png'});
+await p.click('[data-act=openMgmt][data-id=c8]');await p.waitForTimeout(100);await p.screenshot({path:'q4.png'});
+const m=await (await b.newContext({viewport:{width:390,height:820},hasTouch:true,isMobile:true})).newPage();m.on('pageerror',e=>errs.push(e.message));
+await m.goto('file://'+require('os').tmpdir()+'/central-t.html');await m.waitForTimeout(300);await m.click('[data-act=view][data-v=review]');await m.screenshot({path:'q5.png'});await m.click('[data-act=openMgmt][data-id=c7]');await m.waitForTimeout(100);await m.screenshot({path:'q6.png'});
+console.log(errs, await m.evaluate(()=>document.documentElement.scrollWidth));await b.close();})();

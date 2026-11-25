@@ -1,0 +1,484 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Omni — API de Tarefas",
+    "version": "1.0.0",
+    "description": "API das tarefas do Omni (caixa pessoal, projetos, tarefas, seções, comentários e histórico), compatível com a API do Foco: mesmas rotas, campos e erros. Chave pessoal em Meu perfil → API e automações. Diferenças: concluir tarefa que repete avança para a próxima data; reminder_offset_minutes define o lembrete no sino; GET /activity aceita task_id."
+  },
+  "servers": [
+    {
+      "url": "https://omni.filtrovali.com.br/api/v1",
+      "description": "Produção"
+    },
+    {
+      "url": "https://foco.filtrovali.com.br/api/v1",
+      "description": "Endereço do Foco (aponta para o Omni após a migração)"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "FOCO_API_KEY"
+      }
+    },
+    "schemas": {
+      "ProjectInput": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string",
+            "example": "#2c5237"
+          }
+        }
+      },
+      "TaskInput": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Projeto. Omita ou envie null para criar na caixa pessoal, visível só pelo dono da chave."
+          },
+          "section_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "parent_task_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "due_time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "time"
+          },
+          "recurrence": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deadline": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "duration_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reminder_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "assignee_email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
+          },
+          "reminder_offset_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10080,
+            "description": "Lembrete no sino, minutos antes da data/hora da tarefa."
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "security": [],
+        "summary": "Verifica a disponibilidade da API",
+        "responses": {
+          "200": {
+            "description": "Disponível"
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "summary": "Lista projetos",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "archived",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projetos"
+          }
+        }
+      },
+      "post": {
+        "summary": "Cria projeto",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Criado"
+          }
+        }
+      }
+    },
+    "/projects/{id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Obtém projeto",
+        "responses": {
+          "200": {
+            "description": "Projeto"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Atualiza projeto",
+        "responses": {
+          "200": {
+            "description": "Atualizado"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Arquiva projeto",
+        "responses": {
+          "200": {
+            "description": "Arquivado"
+          }
+        }
+      }
+    },
+    "/tasks": {
+      "get": {
+        "summary": "Lista tarefas acessíveis, incluindo a caixa pessoal do dono da chave",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "completed",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assignee_email",
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_before",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_after",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tarefas"
+          }
+        }
+      },
+      "post": {
+        "summary": "Cria tarefa; sem project_id, cria na caixa pessoal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Criada"
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Obtém tarefa",
+        "responses": {
+          "200": {
+            "description": "Tarefa"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Atualiza tarefa",
+        "responses": {
+          "200": {
+            "description": "Atualizada"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Exclui tarefa",
+        "responses": {
+          "200": {
+            "description": "Excluída"
+          }
+        }
+      }
+    },
+    "/tasks/{id}/close": {
+      "post": {
+        "summary": "Conclui tarefa",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Concluída"
+          }
+        }
+      }
+    },
+    "/tasks/{id}/reopen": {
+      "post": {
+        "summary": "Reabre tarefa",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reaberta"
+          }
+        }
+      }
+    },
+    "/sections": {
+      "get": {
+        "summary": "Lista seções",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seções"
+          }
+        }
+      },
+      "post": {
+        "summary": "Cria seção",
+        "responses": {
+          "201": {
+            "description": "Criada"
+          }
+        }
+      }
+    },
+    "/comments": {
+      "get": {
+        "summary": "Lista comentários",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comentários"
+          }
+        }
+      },
+      "post": {
+        "summary": "Cria comentário",
+        "responses": {
+          "201": {
+            "description": "Criado"
+          }
+        }
+      }
+    },
+    "/activity": {
+      "get": {
+        "summary": "Lista eventos de atividade",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos"
+          }
+        }
+      }
+    }
+  }
+}

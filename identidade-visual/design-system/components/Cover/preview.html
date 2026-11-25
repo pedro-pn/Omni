@@ -1,0 +1,35 @@
+<!-- @dsCard height=288 -->
+<style>
+  body{margin:0}
+  .cover{position:relative;width:960px;height:288px;background:var(--fundo);overflow:hidden;font-family:var(--font-sans)}
+  .cover svg{position:absolute;inset:0}
+  .floresta{fill:var(--floresta)} .azul{fill:var(--azul)} .vermelho{fill:var(--vermelho)} .lilas{fill:var(--lilas)} .preto{fill:var(--preto)}
+  .arc{fill:none;stroke-width:16;stroke-linecap:butt}
+  .a-azul{stroke:#11437e} .a-verm{stroke:#c81519} .a-lil{stroke:var(--lilas)}
+  .slab{rx:var(--raio-lg)}
+  .txt{position:absolute;left:40px;bottom:36px;max-width:440px}
+  .txt h1{margin:0;font-size:72px;line-height:.95;font-weight:700;color:var(--floresta-texto);letter-spacing:-1px}
+  .txt p{margin:10px 0 0;font-size:14px;color:var(--muted)}
+</style>
+<div class="cover">
+  <svg viewBox="0 0 960 288" width="960" height="288" aria-hidden="true">
+    <!-- blocks: floresta slab 288×256 (esp-8 inset), azul 120×120, vermelho 56×56, lilas 120×88, preto 56×56 · raio-lg corners
+         arrangement: one tall Floresta slab with satellites to its left, slab bleeding off the bottom-right like the brand book's applications
+         pattern: literal motif — the symbol's three arrow arcs (azul, vermelho, lilás) as a cycle over the slab, because the mark itself is "setas em ciclo"
+         scales: esp-4/esp-8 gaps, raio-lg on blocks, stroke = esp-4 -->
+    <rect class="floresta slab" x="672" y="32" width="288" height="288" rx="16"/>
+    <rect class="azul slab" x="536" y="32" width="120" height="120" rx="16"/>
+    <rect class="lilas slab" x="536" y="168" width="120" height="88" rx="16"/>
+    <rect class="vermelho slab" x="480" y="200" width="40" height="56" rx="6"/>
+    <rect class="preto slab" x="480" y="32" width="40" height="152" rx="6"/>
+    <g transform="translate(816 176)">
+      <path class="arc a-azul" d="M -88 -24 A 92 92 0 0 1 32 -86"/>
+      <polygon class="azul" points="30,-104 62,-80 26,-66" style="fill:#11437e"/>
+      <path class="arc a-verm" d="M 70 -58 A 92 92 0 0 1 60 70"/>
+      <polygon class="vermelho" points="76,62 52,96 38,60" style="fill:#c81519"/>
+      <path class="arc a-lil" d="M 30 88 A 92 92 0 0 1 -90 20"/>
+      <polygon class="lilas" points="-106,26 -88,-8 -72,28"/>
+    </g>
+  </svg>
+  <div class="txt"><h1>Filtrovali</h1><p>Qualidade que move o seu futuro.</p></div>
+</div>

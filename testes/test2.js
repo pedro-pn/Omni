@@ -1,0 +1,17 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(500);
+await p.fill('#msg','Pedro, te mando ainda hoje.');await p.press('#msg','Enter');await p.waitForTimeout(300);
+await p.screenshot({path:'u1.png'});
+await p.click('.done-hint [data-act=conclude]');await p.waitForTimeout(300);
+await p.click('.row[data-id=c6]'); await p.click('[data-act=conclude]');
+await p.click('.row[data-id=c3]'); await p.click('[data-act=conclude]');
+await p.click('[data-act=filter][data-v=people]');await p.waitForTimeout(200);
+await p.screenshot({path:'u2.png'});
+await p.fill('#q','pedro');await p.waitForTimeout(200);await p.screenshot({path:'u3.png'});
+await p.fill('#q','');await p.click('[data-act=filter][data-v=projects]');await p.waitForTimeout(200);await p.screenshot({path:'u4.png'});
+await p.waitForTimeout(18000);await p.click('[data-act=filter][data-v=all]');await p.screenshot({path:'u5.png'});
+console.log(errs);await b.close();})();

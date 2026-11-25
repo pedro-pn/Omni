@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.output/
+.nitro/
+.tanstack/
+.vinxi/
+coverage/
+*.log
+
+# Segredos: nunca versionar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.pfx
+secrets/
+
+# Gerados
+apps/web/src/routeTree.gen.ts
+testes/screenshots/
+.playwright-mcp/
+output/playwright/
+
+# Arquivos de metadados do Windows
+*:Zone.Identifier

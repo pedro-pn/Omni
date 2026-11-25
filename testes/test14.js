@@ -1,0 +1,24 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:950}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c9]');await p.click('[data-act=layer][data-v=int]');await p.waitForTimeout(100);await p.screenshot({path:'w1.png'});
+await p.click('[data-act=ai2][data-v=save]');await p.waitForTimeout(100);
+await p.evaluate(()=>document.getElementById('agendaBlock').scrollIntoView());await p.screenshot({path:'w2.png'});
+// c8 full flow
+await p.click('.row[data-id=c8]');
+const next=async()=>{await p.click('#info [data-act=aiNext]');await p.waitForTimeout(80);};
+await next(); await p.click('.ai-msg:last-of-type [data-v=risk]'); await p.fill('.ai-msg:last-of-type textarea','ASO do Ivan só sai dia 27/10');await p.click('.ai-msg:last-of-type [data-v=riskSave]');
+await next(); await p.click('.ai-msg:last-of-type [data-v=no]'); await p.fill('.ai-msg:last-of-type input[type=date]','2026-11-05'); await p.fill('.ai-msg:last-of-type textarea','Porto remarcou a integração');await p.click('.ai-msg:last-of-type [data-v=noSave]');
+await p.screenshot({path:'w3.png'});
+await next(); await p.click('.ai-msg:last-of-type [data-v=yes]');
+await next(); await p.click('.ai-msg:last-of-type [data-v=yes]');
+await next(); await p.click('.ai-msg:last-of-type [data-v=parcial]'); await p.check('.ai-msg:last-of-type .ck-list input >> nth=0'); await p.fill('.ai-msg:last-of-type input[id$=px]','aguardar carregar o restante do material'); await p.click('.ai-msg:last-of-type [data-v=parcialSave]');
+await next(); await p.click('.ai-msg:last-of-type [data-v=yes]');
+await next(); await p.selectOption('.ai-msg:last-of-type .dest-r select >> nth=1','Outra missão'); await p.click('.ai-msg:last-of-type [data-v=save]');
+await p.waitForTimeout(100);await p.screenshot({path:'w4.png'});
+await p.evaluate(()=>document.getElementById('agendaBlock').scrollIntoView());await p.screenshot({path:'w5.png'});
+await p.click('.row[data-id=c7]');await p.evaluate(()=>{const e=[...document.querySelectorAll('#info .block')].find(b=>b.textContent.includes('Equipe, acesso'));e.scrollIntoView();});await p.screenshot({path:'w6.png'});
+console.log(errs);await b.close();})();

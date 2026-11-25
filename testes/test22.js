@@ -1,0 +1,12 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:950}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c8]');await p.click('.chat-head [data-act=conclude]');await p.waitForTimeout(100);
+const ids=async()=>p.evaluate(()=>[...document.querySelectorAll('#list .row')].map(r=>r.dataset.id).join(','));
+console.log('todas',await ids());
+await p.click('[data-act=filter][data-v=projects]');console.log('missoes',await ids());await p.screenshot({path:'ee1.png'});
+await p.click('[data-act=filter][data-v=all]');await p.waitForTimeout(33000);console.log('apos notificacao',await ids());await p.screenshot({path:'ee2.png'});
+console.log(errs);await b.close();})();

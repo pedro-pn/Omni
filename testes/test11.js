@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:1000}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c7]');await p.click('[data-act=info]');await p.click('[data-act=layer][data-v=mgmt]');await p.waitForTimeout(100);
+await p.screenshot({path:'o1.png'});
+await p.evaluate(()=>document.getElementById('mg-cus').scrollIntoView());await p.screenshot({path:'o2.png'});
+await p.click('.row[data-id=c2]');await p.click('[data-act=layer][data-v=mgmt]');await p.waitForTimeout(100);await p.screenshot({path:'o3.png'});
+const m=await (await b.newContext({viewport:{width:390,height:820},hasTouch:true,isMobile:true})).newPage();m.on('pageerror',e=>errs.push(e.message));
+await m.goto('file://'+require('os').tmpdir()+'/central-t.html');await m.waitForTimeout(300);await m.click('.row[data-id=c7]');await m.click('[data-act=layer][data-v=mgmt]');await m.screenshot({path:'o4.png'});
+console.log(errs, await m.evaluate(()=>document.documentElement.scrollWidth));await b.close();})();

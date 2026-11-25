@@ -1,0 +1,14 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:950}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c7]');await p.click('[data-act=layer][data-v=ger]');await p.click('[data-act=histToggle]');await p.click('.hist-it summary >> nth=2');await p.waitForTimeout(100);
+await p.screenshot({path:'gg1.png'});
+await p.click('#info [data-act=gerManage]');await p.check('.acc-ck[value=renata]');await p.check('input[name=h-renata][value=now]');await p.screenshot({path:'gg2.png'});await p.click('[data-act=accessSave]');
+await p.fill('#msg','Mensagem depois que a Renata entrou.');await p.press('#msg','Enter');
+await p.click('#info [data-act=viewAs][data-v=renata]');await p.waitForTimeout(100);await p.screenshot({path:'gg3.png'});
+await p.click('[data-act=viewAs][data-v=""]');
+await p.click('#info [data-act=intManage]');await p.check('.acc-ck[value=murilo]');await p.click('[data-act=accessSave]');
+console.log(errs);await b.close();})();

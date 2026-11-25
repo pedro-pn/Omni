@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('[data-act=filter][data-v=projects]');await p.click('.row[data-id=c7]');await p.click('[data-act=layer][data-v=mail]');await p.waitForTimeout(100);
+await p.evaluate(()=>{const e=[...document.querySelectorAll('#info .block')].find(b=>b.textContent.includes('E-mails da missão'));e&&e.scrollIntoView();});
+await p.screenshot({path:'e1.png'});
+await p.click('[data-act=openThread] >> nth=0');await p.screenshot({path:'e2.png'});await p.click('.modal [data-act=closeModal]');
+await p.fill('#q','integrações');await p.waitForTimeout(100);console.log('search rows',await p.evaluate(()=>[...document.querySelectorAll('.row .name')].map(x=>x.textContent)));
+await p.fill('#q','');await p.click('.row[data-id=c8]');await p.waitForTimeout(43000);await p.screenshot({path:'e3.png'});
+console.log(errs);await b.close();})();

@@ -1,0 +1,36 @@
+name: Prova de chamadas WhatsApp
+on:
+  pull_request:
+    paths:
+      - 'experiments/whatsapp-chamada/**'
+      - 'deploy/evolution/**'
+      - 'docker-compose.chamada-evolution.yml'
+      - '.github/workflows/chamada-poc.yml'
+  push:
+    branches: ['master', 'feat/whatsapp-chamada-poc']
+    paths:
+      - 'experiments/whatsapp-chamada/**'
+      - 'deploy/evolution/**'
+      - 'docker-compose.chamada-evolution.yml'
+      - '.github/workflows/chamada-poc.yml'
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: experiments/whatsapp-chamada/go.mod
+          cache-dependency-path: experiments/whatsapp-chamada/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node --test audio-worklet.test.mjs
+        working-directory: experiments/whatsapp-chamada
+      - run: go test -race ./...
+        working-directory: experiments/whatsapp-chamada
+      - run: go vet ./...
+        working-directory: experiments/whatsapp-chamada
+      - run: CGO_ENABLED=0 go build -o /tmp/chamada-poc .
+        working-directory: experiments/whatsapp-chamada
+      - run: bash experiments/whatsapp-chamada/evolution-bridge/test.sh

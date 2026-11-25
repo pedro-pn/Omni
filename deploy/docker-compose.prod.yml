@@ -1,0 +1,344 @@
+# Produção e staging do Omni na VPS da Filtrovali, atrás do Caddy compartilhado do
+# filtroAPP (filtroAPP-main/deploy/infra-proxy). Padrão do RUNBOOK: o app publica só em
+# 172.17.0.1:<porta> e o Caddy chega por host.docker.internal.
+# Portas já usadas na VPS: 8081 filtroboard, 8082 whatsapp do Prisma, 8083 comercial,
+# 8084 Omni (produção), 8085 Omni (staging), 8086 áudio das chamadas (produção),
+# 8087 outro serviço (ocupada), 8088 áudio das chamadas (staging) — OMNI_AUDIO_PORT.
+#
+# Passo a passo completo: docs/producao/deploy.md. Cada ambiente é um projeto do compose
+# (volumes e redes separados):
+#   docker compose -p omni-staging -f deploy/docker-compose.prod.yml --env-file deploy/.env.staging up -d --build
+#   docker compose -p omni         -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+#
+# deploy/.env.production (nunca versionar) precisa de:
+#   POSTGRES_PASSWORD, OMNI_OWNER_PASSWORD, OMNI_APP_PASSWORD, OMNI_WORKER_PASSWORD,
+#   APP_ORIGIN=https://omni.filtrovali.com.br, AUTH_SECRET, ENTRA_* (login Microsoft),
+#   FILTROAPP_API_TOKEN (token de produção, restrito ao IP da VPS)
+#
+# WhatsApp (Evolution própria do Omni, ADR 0004) — só com o perfil "whatsapp":
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production --profile whatsapp up -d --build
+# e, no .env.production: WHATSAPP_EVOLUTION_KEY, WHATSAPP_WEBHOOK_SECRET, EVOLUTION_POSTGRES_PASSWORD
+# (três valores diferentes, `openssl rand -hex 32`), WHATSAPP_EVOLUTION_URL=http://evolution:8080,
+# WHATSAPP_WEBHOOK_URL=http://web:3000/api/whatsapp/webhook. Passo a passo: docs/integracoes/whatsapp-evolution.md.
+
+name: omni
+
+# Certificado do Microsoft Graph (e outros arquivos secretos), só leitura.
+x-segredos: &segredos
+  - ${OMNI_SECRETS_DIR:-./secrets}:/run/secrets/omni:ro
+
+x-graph: &graph
+  GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+  GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+  # ex.: /run/secrets/omni/omni-graph.key (arquivo em ${OMNI_SECRETS_DIR}, legível pelo usuário 1000)
+  GRAPH_PRIVATE_KEY_PATH: ${GRAPH_PRIVATE_KEY_PATH:-}
+  GRAPH_CERT_SHA256_THUMBPRINT: ${GRAPH_CERT_SHA256_THUMBPRINT:-}
+  # Biblioteca do site OmniAnexos (gravações, arquivos do Interno/Gerencial).
+  GRAPH_ANEXOS_DRIVE_ID: ${GRAPH_ANEXOS_DRIVE_ID:-}
+
+x-db-urls: &db-urls
+  DATABASE_URL_OWNER: postgres://omni_owner:${OMNI_OWNER_PASSWORD}@postgres:5432/omni
+  DATABASE_URL_APP: postgres://omni_app:${OMNI_APP_PASSWORD}@postgres:5432/omni
+  DATABASE_URL_WORKER: postgres://omni_worker:${OMNI_WORKER_PASSWORD}@postgres:5432/omni
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: omni
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      OMNI_OWNER_PASSWORD: ${OMNI_OWNER_PASSWORD:?}
+      OMNI_APP_PASSWORD: ${OMNI_APP_PASSWORD:?}
+      OMNI_WORKER_PASSWORD: ${OMNI_WORKER_PASSWORD:?}
+      TZ: America/Sao_Paulo
+    volumes:
+      - omni_pg:/var/lib/postgresql/data
+      - ./postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d omni"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    networks: [interna]
+
+  migrate:
+    build: { context: .., target: migrate }
+    environment:
+      DATABASE_URL_OWNER: postgres://omni_owner:${OMNI_OWNER_PASSWORD}@postgres:5432/omni
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    networks: [interna]
+
+  web:
+    build: { context: .., target: web, args: { OMNI_VERSAO: "${OMNI_VERSAO:-desconhecida}" } }
+    restart: unless-stopped
+    environment:
+      <<: [*db-urls, *graph]
+      NODE_ENV: production
+      OMNI_AMBIENTE: ${OMNI_AMBIENTE:?defina OMNI_AMBIENTE (staging ou producao)}
+      APP_ORIGIN: ${APP_ORIGIN:?}
+      AUTH_SECRET: ${AUTH_SECRET:?}
+      AUTH_DEV_LOGIN: "off"
+      ENTRA_LOGIN_ENABLED: ${ENTRA_LOGIN_ENABLED:-on}
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      ENTRA_PRIVATE_KEY_PATH: ${ENTRA_PRIVATE_KEY_PATH:-}
+      ENTRA_CERT_SHA256_THUMBPRINT: ${ENTRA_CERT_SHA256_THUMBPRINT:-}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
+      PRISMA_OMNI_ENVIRONMENT: ${PRISMA_OMNI_ENVIRONMENT:-sandbox}
+      # "real" só na produção (a validação recusa em staging)
+      EMAIL_ENVIO: ${EMAIL_ENVIO:-ensaio}
+      APPLE_CALENDAR_SIGNING_KEY: ${APPLE_CALENDAR_SIGNING_KEY:-}
+      # Bloco "No Prisma" e feedback (contrato 1.67.0): a mesma credencial reader do worker
+      PRISMA_OMNI_READER_TOKEN: ${PRISMA_OMNI_READER_TOKEN:-}
+      # PDF dos relatórios (spec 038): o web busca no filtroAPP na hora, só leitura
+      FILTROAPP_API_URL: ${FILTROAPP_API_URL:-https://app.filtrovali.com.br/api/integracoes/v1}
+      FILTROAPP_API_TOKEN: ${FILTROAPP_API_TOKEN:-}
+      WHATSAPP_EVOLUTION_URL: ${WHATSAPP_EVOLUTION_URL:-}
+      WHATSAPP_EVOLUTION_KEY: ${WHATSAPP_EVOLUTION_KEY:-}
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
+      WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+      # "real" só depois do inventário dos números e do comunicado ao time
+      WHATSAPP_ENVIO: ${WHATSAPP_ENVIO:-ensaio}
+      # Alertas pedidos à IA (@IA, /alerta) e chave pública das notificações no celular
+      IA_ALERTAS: ${IA_ALERTAS:-desligada}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
+      # Chamadas pessoais do WhatsApp (perfil "chamadas"): serviço de voz pela rede interna
+      CHAMADAS_HABILITADAS: ${CHAMADAS_HABILITADAS:-off}
+      # Abre as gravações cifradas do SharePoint para tocar (a mesma chave do worker)
+      GRAVACOES_CHAVE_MESTRA: ${GRAVACOES_CHAVE_MESTRA:-}
+      CHAMADAS_SERVICO_URL: ${CHAMADAS_SERVICO_URL:-}
+      CHAMADAS_SERVICO_KEY: ${CHAMADAS_SERVICO_KEY:-}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    volumes: *segredos
+    ports:
+      - "172.17.0.1:${OMNI_WEB_PORT:-8084}:3000"
+    mem_limit: 768m
+    networks: [interna]
+
+  worker:
+    build: { context: .., target: worker, args: { OMNI_VERSAO: "${OMNI_VERSAO:-desconhecida}" } }
+    restart: unless-stopped
+    environment:
+      <<: [*db-urls, *graph]
+      NODE_ENV: production
+      OMNI_AMBIENTE: ${OMNI_AMBIENTE:?defina OMNI_AMBIENTE (staging ou producao)}
+      TZ_EMPRESA: America/Sao_Paulo
+      # Pessoas liberadas no app "Omni" do Entra → lista de Pessoas (job entra-pessoas, pelo Graph)
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      FILTROAPP_API_URL: ${FILTROAPP_API_URL:-https://app.filtrovali.com.br/api/integracoes/v1}
+      FILTROAPP_API_TOKEN: ${FILTROAPP_API_TOKEN:-}
+      PRISMA_OMNI_ENVIRONMENT: ${PRISMA_OMNI_ENVIRONMENT:-sandbox}
+      PRISMA_OMNI_READER_TOKEN: ${PRISMA_OMNI_READER_TOKEN:-}
+      # "real" só quando o token de produção tiver os escopos de escrita
+      FILTROAPP_ESCRITA: ${FILTROAPP_ESCRITA:-desligada}
+      WHATSAPP_EVOLUTION_URL: ${WHATSAPP_EVOLUTION_URL:-}
+      WHATSAPP_EVOLUTION_KEY: ${WHATSAPP_EVOLUTION_KEY:-}
+      # IA v2 (ADR 0005): leitura dos RDOs, resumo de reuniões e alertas pedidos à IA (todas desligadas por padrão)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      IA_LEITURA_RDO: ${IA_LEITURA_RDO:-desligada}
+      IA_RESUMO_REUNIAO: ${IA_RESUMO_REUNIAO:-desligada}
+      IA_ALERTAS: ${IA_ALERTAS:-desligada}
+      # Retenção por tipo de dado (só dados técnicos): ensaio conta, real apaga (docs/producao/retencao.md)
+      RETENCAO: ${RETENCAO:-ensaio}
+      # Migração do Foco (só durante a migração; docs/producao/migracao-foco.md): o importador roda dentro do worker
+      FOCO_SUPABASE_URL: ${FOCO_SUPABASE_URL:-}
+      FOCO_SUPABASE_SERVICE_ROLE_KEY: ${FOCO_SUPABASE_SERVICE_ROLE_KEY:-}
+      FOCO_CHAVE_API_TESTE: ${FOCO_CHAVE_API_TESTE:-}
+      FOCO_SUPABASE_CHAVE_PUBLICA: ${FOCO_SUPABASE_CHAVE_PUBLICA:-}
+      FOCO_EXPORT_TOKEN: ${FOCO_EXPORT_TOKEN:-}
+      FOCO_ANEXOS_PASTA: ${FOCO_ANEXOS_PASTA:-}
+      APPLE_CALENDAR_SIGNING_KEY: ${APPLE_CALENDAR_SIGNING_KEY:-}
+      # E-mail novo na hora: o Graph avisa em APP_ORIGIN/api/graph/avisos (docs/integracoes/m365-registro.md, passo 4b)
+      EMAIL_AVISO_IMEDIATO: ${EMAIL_AVISO_IMEDIATO:-desligado}
+      # Resumo das ligações gravadas (só quando o dono pede): áudio do serviço de voz
+      IA_RESUMO_CHAMADA: ${IA_RESUMO_CHAMADA:-desligada}
+      IA_ASSINATURAS: ${IA_ASSINATURAS:-desligada}
+      OPENAI_TRANSCRICAO_MODEL: ${OPENAI_TRANSCRICAO_MODEL:-gpt-4o-transcribe}
+      CHAMADAS_SERVICO_URL: ${CHAMADAS_SERVICO_URL:-}
+      CHAMADAS_SERVICO_KEY: ${CHAMADAS_SERVICO_KEY:-}
+      # Chave mestra das gravações cifradas (a mesma no web): sem ela, nada vai ao SharePoint
+      GRAVACOES_CHAVE_MESTRA: ${GRAVACOES_CHAVE_MESTRA:-}
+      # Avisos das tarefas por e-mail e resumo semanal ("real" só em producao e com a caixa remetente)
+      EMAIL_ENVIO: ${EMAIL_ENVIO:-ensaio}
+      EMAIL_AVISOS_REMETENTE: ${EMAIL_AVISOS_REMETENTE:-}
+      APP_ORIGIN: ${APP_ORIGIN:?defina APP_ORIGIN}
+      # Notificações no celular (Web Push): as duas chaves VAPID (npx web-push generate-vapid-keys)
+      WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
+      WEB_PUSH_PRIVATE_KEY: ${WEB_PUSH_PRIVATE_KEY:-}
+      WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-https://omni.filtrovali.com.br}
+    volumes: *segredos
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 768m
+    # whatsapp-dados: só para a limpeza do histórico no banco da Evolution.
+    networks: [interna, whatsapp-dados]
+
+  # ------------------------------------------------ WhatsApp (perfil "whatsapp")
+  # Evolution própria do Omni, separada da do Prisma (chave geral, banco e Redis
+  # próprios). Sem porta publicada: o Omni chama http://evolution:8080 e a
+  # Evolution chama o webhook em http://web:3000 pela rede interna. O painel da
+  # Evolution não é usado (pareamento pela Administração do Omni).
+  evolution:
+    profiles: [whatsapp]
+    # Mesmo patch de presença + a ponte das chamadas (inerte sem OMNI_CHAMADA_PONTE).
+    build:
+      context: ./evolution
+      dockerfile: Dockerfile.chamadas
+      additional_contexts:
+        ponte: ../experiments/whatsapp-chamada/evolution-bridge
+    image: omni-evolution:2.3.7-chamadas.1
+    restart: unless-stopped
+    environment:
+      # Ponte das chamadas (perfil "chamadas"): "producao" (qualquer contato) ou "omni"
+      # (staging: só CHAMADA_NUMEROS_TESTE). Vazio = desligada. Só na rede interna.
+      OMNI_CHAMADA_PONTE: ${CHAMADA_PONTE:-}
+      OMNI_CHAMADA_TOKEN: ${CHAMADA_PONTE_TOKEN:-}
+      OMNI_CHAMADA_NUMEROS: ${CHAMADA_NUMEROS_TESTE:-}
+      OMNI_CHAMADA_PORTA: "8097"
+      OMNI_CHAMADA_BIND: 0.0.0.0
+      OMNI_CHAMADA_HOST: evolution
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      SERVER_URL: http://evolution:8080
+      AUTHENTICATION_API_KEY: ${WHATSAPP_EVOLUTION_KEY:-}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_POSTGRES_PASSWORD:-}@evolution-postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: omni_whatsapp
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      # O histórico do pareamento fica só aqui; o navegador do dono do número baixa para o aparelho (o Omni não copia).
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: omni_whatsapp
+      CACHE_REDIS_SAVE_INSTANCES: "true"
+      CACHE_LOCAL_ENABLED: "false"
+      # A Evolution 2.3.7 recusa chamadas sem Origin se o CORS tiver lista; a chave continua obrigatória.
+      CORS_ORIGIN: "*"
+      CORS_CREDENTIALS: "false"
+      LOG_LEVEL: ERROR,WARN
+      LOG_BAILEYS: error
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      RABBITMQ_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+      SQS_ENABLED: "false"
+      CHATWOOT_ENABLED: "false"
+      TYPEBOT_ENABLED: "false"
+      N8N_ENABLED: "false"
+      OPENAI_ENABLED: "false"
+      DEL_INSTANCE: "false"
+      LANGUAGE: pt-BR
+    volumes:
+      - evolution_sessions:/evolution/instances
+    depends_on:
+      evolution-postgres: { condition: service_healthy }
+      evolution-redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    mem_limit: 768m
+    # interna: fala com o Omni e sai para a internet (servidores do WhatsApp); whatsapp-dados: banco e Redis.
+    networks: [interna, whatsapp-dados]
+
+  # ------------------------------------------------ Chamadas (perfil "chamadas", junto do "whatsapp")
+  # Serviço de voz das chamadas pessoais (experiments/whatsapp-chamada). A API
+  # interna (8098) fica só na rede interna (web e worker, com chave). Só a porta
+  # do áudio do navegador (8099, apenas /omni/audio) é publicada para o Caddy.
+  # Gravações no volume chamadas_data (backup em deploy/backup.sh).
+  voz:
+    profiles: [chamadas]
+    build: ../experiments/whatsapp-chamada
+    image: omni-chamadas-voz:1
+    restart: unless-stopped
+    environment:
+      CHAMADA_OMNI: "on"
+      # producao: qualquer contato; teste (staging): só CHAMADA_NUMEROS_TESTE
+      CHAMADA_MODO: ${CHAMADA_MODO:-producao}
+      CHAMADA_CONEXAO: evolution
+      CHAMADA_DADOS: /data
+      CHAMADA_ESCUTAR: 0.0.0.0:8098
+      CHAMADA_ESCUTAR_AUDIO: 0.0.0.0:8099
+      CHAMADA_OMNI_KEY: ${CHAMADAS_SERVICO_KEY:-}
+      CHAMADA_OMNI_ORIGIN: ${APP_ORIGIN:?defina APP_ORIGIN}
+      CHAMADA_OMNI_EVENTOS: http://web:3000/api/chamadas/eventos
+      CHAMADA_PONTE_URL: ws://evolution:8097/v1/calls
+      CHAMADA_PONTE_TOKEN: ${CHAMADA_PONTE_TOKEN:-}
+      CHAMADA_NUMEROS_TESTE: ${CHAMADA_NUMEROS_TESTE:-}
+      # Limite por ligação (s) e por quanto tempo a gravação fica (h). Produção: padrão 1 h e 5 anos; até 14400 s e 87600 h.
+      CHAMADA_LIMITE_SEGUNDOS: ${CHAMADA_LIMITE_SEGUNDOS:-}
+      CHAMADA_RETENCAO_HORAS: ${CHAMADA_RETENCAO_HORAS:-}
+      CHAMADA_DIAGNOSTICO: ${CHAMADA_DIAGNOSTICO:-0}
+    volumes:
+      - chamadas_data:/data
+    ports:
+      - "172.17.0.1:${OMNI_AUDIO_PORT:-8086}:8099"
+    depends_on:
+      evolution: { condition: service_healthy }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    stop_grace_period: 10s
+    # interna: web, worker e a ponte da Evolution; sai para a internet (áudio com o WhatsApp).
+    networks: [interna]
+
+  evolution-postgres:
+    profiles: [whatsapp]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD:-}
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    networks: [whatsapp-dados]
+
+  evolution-redis:
+    profiles: [whatsapp]
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - evolution_cache:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 256m
+    networks: [whatsapp-dados]
+
+volumes:
+  omni_pg:
+  chamadas_data:
+  evolution_sessions:
+  evolution_pg:
+  evolution_cache:
+
+networks:
+  interna:
+  whatsapp-dados:
+    internal: true

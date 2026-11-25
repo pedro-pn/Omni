@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>'+fs.readFileSync(require('path').join(__dirname,'..','prototipo','central-filtrovali.fragment.html'),'utf8')+'</body></html>';
+fs.writeFileSync(''+require('os').tmpdir()+'/central-t.html',html);
+const p=await b.newPage({viewport:{width:1440,height:950}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+require('os').tmpdir()+'/central-t.html');await p.waitForTimeout(300);
+await p.click('.row[data-id=c7]');await p.click('[data-act=layer][data-v=ger]');await p.waitForTimeout(100);
+await p.fill('#msg','Vamos fechar a posição da multa na reunião de segunda.');await p.press('#msg','Enter');await p.waitForTimeout(100);
+await p.screenshot({path:'dd1.png'});
+await p.click('#info [data-act=gerManage]');await p.check('.acc-ck[value=renata]');await p.screenshot({path:'dd2.png'});await p.click('[data-act=accessSave]');
+await p.click('[data-act=layer][data-v=int]');const n=await p.evaluate(()=>document.querySelectorAll('.ger-msg').length);
+await p.click('[data-act=layer][data-v=wa]');const n2=await p.evaluate(()=>document.querySelectorAll('.ger-msg').length);
+console.log(errs,n,n2);await b.close();})();
