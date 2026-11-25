@@ -8,10 +8,14 @@
 #
 #   deploy/restore-drill.sh                                   # último em b2://filtrovali-omni/daily
 #   RESTORE_DRILL_B2_URI=b2://filtrovali-omni/monthly deploy/restore-drill.sh
-#   RESTORE_DRILL_SOURCE=/root/backups/omni/latest deploy/restore-drill.sh   # pasta local
+#   RESTORE_DRILL_SOURCE=~/backups/omni-b2/latest deploy/restore-drill.sh   # pasta local
 set -euo pipefail
+# Roda como o usuário omni. O banco descartável sobe no Docker rootless dele (o cron não carrega o ~/.profile).
+if [ -z "${DOCKER_HOST:-}" ] && [ -S "/run/user/$(id -u)/docker.sock" ]; then
+  export DOCKER_HOST="unix:///run/user/$(id -u)/docker.sock"
+fi
 
-PATH="${PATH:-/usr/bin:/bin}:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+PATH="${PATH:-/usr/bin:/bin}:${HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
 
 STARTED_AT="$(date -Iseconds)"
@@ -19,11 +23,11 @@ STARTED_EPOCH="$(date +%s)"
 RESTORE_DRILL_B2_URI="${RESTORE_DRILL_B2_URI:-b2://filtrovali-omni/daily}"
 RESTORE_DRILL_SOURCE="${RESTORE_DRILL_SOURCE:-}"
 B2_BIN="${B2_BIN:-b2}"
-B2_ENV_FILE="${B2_ENV_FILE:-/root/.config/omni-backup/b2.env}"
-export B2_ACCOUNT_INFO="${B2_ACCOUNT_INFO:-/root/.config/omni-backup/b2_account_info}"
-SECRETS_PASSPHRASE_FILE="${SECRETS_PASSPHRASE_FILE:-/root/.config/omni-backup/segredos.senha}"
-RESTORE_STATUS_FILE="${RESTORE_STATUS_FILE:-/root/backups/omni/status/restore-latest.json}"
-WORK_ROOT="${RESTORE_DRILL_WORK_ROOT:-/root/backups/omni/restore-drill}"
+B2_ENV_FILE="${B2_ENV_FILE:-${HOME}/.config/omni-backup/b2.env}"
+export B2_ACCOUNT_INFO="${B2_ACCOUNT_INFO:-${HOME}/.config/omni-backup/b2_account_info}"
+SECRETS_PASSPHRASE_FILE="${SECRETS_PASSPHRASE_FILE:-${HOME}/.config/omni-backup/segredos.senha}"
+RESTORE_STATUS_FILE="${RESTORE_STATUS_FILE:-${HOME}/backups/omni-b2/status/restore-latest.json}"
+WORK_ROOT="${RESTORE_DRILL_WORK_ROOT:-${HOME}/backups/omni-b2/restore-drill}"
 POSTGRES_IMAGE="${RESTORE_DRILL_POSTGRES_IMAGE:-postgres:16-alpine}"
 CONTAINER_NAME="omni-restore-drill-$$"
 MAX_DATA_AGE_HOURS="${RESTORE_DRILL_MAX_DATA_AGE_HOURS:-36}"

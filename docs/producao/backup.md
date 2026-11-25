@@ -1,7 +1,8 @@
 # Backup e restauração do Omni
 
-Mesmo modelo do filtroAPP (`deploy/BACKUP.md` dele): cron do **root** na VPS, cópia no Backblaze B2 e
-ensaio de restauração mensal. Bucket próprio: **`filtrovali-omni`** (privado).
+Mesmo modelo do filtroAPP (`deploy/BACKUP.md` dele): cópia no Backblaze B2 de hora em hora, por dia e
+por mês, e ensaio de restauração mensal. Bucket próprio: **`filtrovali-omni`** (privado).
+Diferente do filtroAPP, **tudo roda como o usuário `omni`**, pelo cron dele, sem root.
 
 | Agenda | Destino no B2 | O que leva | Guarda no B2 |
 |---|---|---|---|
@@ -12,13 +13,17 @@ ensaio de restauração mensal. Bucket próprio: **`filtrovali-omni`** (privado)
 
 Os minutos (:20 e :50) ficam fora dos horários do filtroAPP para os dois não rodarem juntos.
 
-**Docker rootless:** o Omni roda no Docker do usuário `omni` (`/run/user/<uid>/docker.sock`, com
-*linger* ligado), não no Docker do sistema, que é o do filtroAPP. O `backup-prod.sh` roda como root e
-aponta para esse socket sozinho (`OMNI_DOCKER_USER=omni`). O ensaio de restauração usa o Docker do
-sistema, porque o banco descartável não precisa do Omni.
+**Por que o usuário `omni`:** o Omni roda no Docker rootless dele (`/run/user/<uid>/docker.sock`, com
+*linger* ligado), e ele já tem o `.env.production` e os certificados; root não acrescenta nada. Os
+scripts usam esse socket mesmo no cron, que não carrega o `~/.profile`.
 
-Na VPS ficam os 5 últimos backups em `/root/backups/omni/` e o resultado em
-`/root/backups/omni/status/backup-latest.json` e `restore-latest.json`.
+**Proteção dos backups:** a chave do B2 fica na conta `omni`, que já guarda os segredos da produção.
+Por isso ela é criada **sem `deleteFiles`**: quem invadir a conta grava e lê, mas não apaga backups.
+Quem apaga é a regra de expiração do próprio bucket, e o `b2 sync` do script nunca apaga.
+
+Na VPS ficam os 5 últimos backups em `~/backups/omni-b2/` e o resultado em
+`~/backups/omni-b2/status/backup-latest.json` e `restore-latest.json` (a cópia local antes de
+publicar fica separada, em `~/backups/omni/`).
 
 ## O que cada backup guarda
 
@@ -33,66 +38,75 @@ Na VPS ficam os 5 últimos backups em `/root/backups/omni/` e o resultado em
 
 Os arquivos do SharePoint (anexos, gravações arquivadas) já ficam fora da VPS, no Microsoft 365.
 
-## Configurar (uma vez, com `sudo`)
+## Configurar (uma vez)
 
-1. **Backblaze:** criar o bucket privado `filtrovali-omni` e uma Application Key **só desse bucket**
-   (Read and Write). Não use a chave do filtroAPP nem a Master Key.
-2. **Regras de expiração do bucket** (Lifecycle Rules, por prefixo): `hourly-db/` 7 dias,
-   `daily/` 60 dias, `monthly/` 365 dias.
-3. **Credenciais e senha dos segredos**, só para o root:
+1. **Backblaze (painel ou CLI de quem administra a conta):** bucket privado `filtrovali-omni`, regras de
+   expiração por prefixo (`hourly-db/` 7 dias, `daily/` 60 dias, `monthly/` 365 dias) e uma chave
+   **só desse bucket e sem apagar**:
 
    ```bash
-   sudo install -d -m 700 /root/.config/omni-backup /root/logs
-   sudo editor /root/.config/omni-backup/b2.env
+   b2 key create --bucket filtrovali-omni omni-backup listBuckets,listFiles,readFiles,writeFiles
+   ```
+
+   Não use a chave do filtroAPP nem a Master Key.
+
+2. **CLI do B2 para o usuário `omni`** (sem sudo; o pipx já está na VPS): `pipx install b2`.
+   Ela fica em `~/.local/bin/b2`, que os scripts já procuram.
+
+3. **Credenciais e senha dos segredos**, como `omni`:
+
+   ```bash
+   install -d -m 700 ~/.config/omni-backup ~/logs
+   editor ~/.config/omni-backup/b2.env
    # B2_APPLICATION_KEY_ID="<keyID>"
    # B2_APPLICATION_KEY="<applicationKey>"
-   sudo sh -c 'openssl rand -base64 48 > /root/.config/omni-backup/segredos.senha'
-   sudo chmod 600 /root/.config/omni-backup/*
+   openssl rand -base64 48 > ~/.config/omni-backup/segredos.senha   # ou a senha que já está no cofre
+   chmod 600 ~/.config/omni-backup/*
    ```
 
-   **Guarde a senha de `segredos.senha` no cofre de senhas da empresa.** Se a VPS for perdida, é ela
-   que abre os segredos do backup.
+   **A senha de `segredos.senha` fica também no cofre de senhas da empresa.** Se a VPS for perdida, é
+   ela que abre os segredos do backup. Se já existe uma no cofre (backups feitos antes), use a mesma.
 
-4. **CLI do B2**: o root já tem a do filtroAPP (`/root/.local/bin/b2`). O Omni usa a própria chave
-   (pelas variáveis do `b2.env`) e um arquivo de conta separado
-   (`B2_ACCOUNT_INFO=/root/.config/omni-backup/b2_account_info`), sem mexer na autorização do filtroAPP.
-
-5. **Primeiro backup e primeiro ensaio, à mão:**
+4. **Primeiro backup e primeiro ensaio, à mão** (como `omni`):
 
    ```bash
-   cd /home/omni/apps/Omni
-   sudo B2_URI=b2://filtrovali-omni/daily deploy/backup-prod.sh
-   sudo deploy/restore-drill.sh
-   sudo cat /root/backups/omni/status/restore-latest.json   # status SUCCESS e o tempo da restauração
+   cd ~/apps/Omni
+   B2_URI=b2://filtrovali-omni/daily deploy/backup-prod.sh
+   deploy/restore-drill.sh
+   cat ~/backups/omni-b2/status/backup-latest.json ~/backups/omni-b2/status/restore-latest.json
    ```
 
-6. **Cron do root** (`sudo crontab -e`), com o `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` do filtroAPP para
-   receber as falhas:
+   No ensaio: `"status": "SUCCESS"`, `"secrets": "conferidos"` e `hoursSinceLastSync` baixo.
+
+5. **Cron do `omni`** (`crontab -e`, como `omni`), com o `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID` do
+   filtroAPP para receber as falhas:
 
    ```cron
    TELEGRAM_TOKEN=<o mesmo do filtroAPP>
    TELEGRAM_CHAT_ID=<o mesmo do filtroAPP>
-   20 0,3-23 * * * B2_URI=b2://filtrovali-omni/hourly-db INCLUDE_VOLUMES=false INCLUDE_SECRETS=false /home/omni/apps/Omni/deploy/backup-prod.sh >> /root/logs/backup-omni.log 2>&1
-   20 2 * * * B2_URI=b2://filtrovali-omni/daily BACKUP_LOCK_TIMEOUT_SECONDS=7200 /home/omni/apps/Omni/deploy/backup-prod.sh >> /root/logs/backup-omni.log 2>&1
-   20 1 1 * * B2_URI=b2://filtrovali-omni/monthly BACKUP_LOCK_TIMEOUT_SECONDS=7200 /home/omni/apps/Omni/deploy/backup-prod.sh >> /root/logs/backup-omni.log 2>&1
-   50 4 2 * * /home/omni/apps/Omni/deploy/restore-drill.sh >> /root/logs/restore-drill-omni.log 2>&1
+   20 0,3-23 * * * B2_URI=b2://filtrovali-omni/hourly-db INCLUDE_VOLUMES=false INCLUDE_SECRETS=false $HOME/apps/Omni/deploy/backup-prod.sh >> $HOME/logs/backup-omni.log 2>&1
+   20 2 * * * B2_URI=b2://filtrovali-omni/daily BACKUP_LOCK_TIMEOUT_SECONDS=7200 $HOME/apps/Omni/deploy/backup-prod.sh >> $HOME/logs/backup-omni.log 2>&1
+   20 1 1 * * B2_URI=b2://filtrovali-omni/monthly BACKUP_LOCK_TIMEOUT_SECONDS=7200 $HOME/apps/Omni/deploy/backup-prod.sh >> $HOME/logs/backup-omni.log 2>&1
+   50 4 2 * * $HOME/apps/Omni/deploy/restore-drill.sh >> $HOME/logs/restore-drill-omni.log 2>&1
    ```
 
-   O cron do root roda o script da pasta do repositório: uma publicação (`deploy/publicar.sh`) muda o
-   script junto com o código, como no filtroAPP.
+   Os scripts rodam da pasta do repositório: uma publicação (`deploy/publicar.sh`) os atualiza junto
+   com o código.
 
 ## Restaurar de verdade
 
-1. Baixar o backup: `sudo -E b2 sync b2://filtrovali-omni/daily/<AAAA-MM-DD-HHMMSS> /root/restaurar`
-   (com as variáveis do `b2.env` carregadas) e conferir: `cd /root/restaurar && sha256sum -c SHA256SUMS`.
+1. Como `omni`, baixar o backup e conferir:
+   `set -a; . ~/.config/omni-backup/b2.env; set +a; export B2_ACCOUNT_INFO=~/.config/omni-backup/b2_account_info`,
+   `b2 sync b2://filtrovali-omni/daily/<AAAA-MM-DD-HHMMSS> ~/restaurar` e
+   `cd ~/restaurar && sha256sum -c SHA256SUMS`.
 2. Segredos (servidor novo):
-   `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:<senha> < segredos.tar.gz.enc | tar -xzf - -C /home/omni/apps/Omni`.
+   `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:<senha> < segredos.tar.gz.enc | tar -xzf - -C ~/apps/Omni`.
 3. Parar web e worker e restaurar o banco:
 
    ```bash
    omni() { docker compose -p omni -f deploy/docker-compose.prod.yml --env-file deploy/.env.production "$@"; }
    omni stop web worker
-   omni exec -T postgres pg_restore -U postgres -d omni --clean --if-exists < /root/restaurar/omni.dump
+   omni exec -T postgres pg_restore -U postgres -d omni --clean --if-exists < ~/restaurar/omni.dump
    omni up -d --wait
    ```
 
@@ -101,6 +115,11 @@ Os arquivos do SharePoint (anexos, gravações arquivadas) já ficam fora da VPS
 5. Conferir `/api/saude` e registrar o incidente (`docs/producao/incidentes.md`).
 
 ## Conferido
+
+- 25/11/2026, VPS de produção, como `omni` (sem B2 e sem segredos): `backup-prod.sh` gerou o backup
+  em 7 s (omni.dump 12 MB, evolution.dump 50 MB, volumes) e o `restore-drill.sh` o restaurou num banco
+  descartável no Docker do `omni` em 12 s: 78 migrations, 90 missões, sincronização de menos de 1 h,
+  nenhuma tabela de dados sem RLS. A cópia de teste foi apagada em seguida.
 
 - 25/11/2026, máquina de desenvolvimento: `restore-drill.sh` com um dump do banco de desenvolvimento
   e segredos cifrados de teste: 78 migrations, 30 pessoas, 90 missões restauradas em 11 s, segredos

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Backup do Omni para fora da VPS (Backblaze B2, bucket filtrovali-omni), no mesmo modelo do filtroAPP.
-# Roda como root pelo cron (passo a passo em docs/producao/backup.md).
+# Roda como o usuário omni, pelo cron dele (passo a passo em docs/producao/backup.md).
 #
 #   B2_URI=b2://filtrovali-omni/daily deploy/backup-prod.sh                       # completo
 #   B2_URI=b2://filtrovali-omni/hourly-db INCLUDE_VOLUMES=false INCLUDE_SECRETS=false deploy/backup-prod.sh
@@ -16,7 +16,7 @@
 # Escreve o resultado em BACKUP_STATUS_FILE e avisa no Telegram se falhar (TELEGRAM_TOKEN/CHAT_ID).
 set -euo pipefail
 
-PATH="/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+PATH="${HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 export PATH
 
 TELEGRAM_TOKEN="${TELEGRAM_TOKEN:-}"
@@ -30,26 +30,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$(dirname "$SCRIPT_DIR")}"
 PROJETO="${PROJETO:-omni}"
 ENVFILE="${ENVFILE:-deploy/.env.production}"
-BACKUP_ROOT="${BACKUP_ROOT:-/root/backups/omni}"
+# Pasta própria: ~/backups/omni é a cópia local feita antes de publicar (deploy/backup.sh).
+BACKUP_ROOT="${BACKUP_ROOT:-${HOME}/backups/omni-b2}"
 BACKUP_LOCK_FILE="${BACKUP_LOCK_FILE:-$BACKUP_ROOT/backup-prod.lock}"
 BACKUP_STATUS_FILE="${BACKUP_STATUS_FILE:-$BACKUP_ROOT/status/backup-latest.json}"
 BACKUP_LOCK_TIMEOUT_SECONDS="${BACKUP_LOCK_TIMEOUT_SECONDS:-0}"
 INCLUDE_VOLUMES="${INCLUDE_VOLUMES:-true}"
 INCLUDE_SECRETS="${INCLUDE_SECRETS:-true}"
-SECRETS_PASSPHRASE_FILE="${SECRETS_PASSPHRASE_FILE:-/root/.config/omni-backup/segredos.senha}"
+SECRETS_PASSPHRASE_FILE="${SECRETS_PASSPHRASE_FILE:-${HOME}/.config/omni-backup/segredos.senha}"
 B2_URI="${B2_URI:-}"
 B2_BIN="${B2_BIN:-b2}"
-B2_ENV_FILE="${B2_ENV_FILE:-/root/.config/omni-backup/b2.env}"
+B2_ENV_FILE="${B2_ENV_FILE:-${HOME}/.config/omni-backup/b2.env}"
 # Chave do B2 só do bucket do Omni, separada da do filtroAPP (o b2 guarda a conta autorizada nesse arquivo).
-export B2_ACCOUNT_INFO="${B2_ACCOUNT_INFO:-/root/.config/omni-backup/b2_account_info}"
+export B2_ACCOUNT_INFO="${B2_ACCOUNT_INFO:-${HOME}/.config/omni-backup/b2_account_info}"
 LOCAL_BACKUP_KEEP="${LOCAL_BACKUP_KEEP:-5}"
-# O Omni roda no Docker rootless do usuário omni, não no Docker do sistema (o do filtroAPP).
-# O root fala com ele pelo socket do usuário.
-OMNI_DOCKER_USER="${OMNI_DOCKER_USER:-omni}"
-if [ -z "${DOCKER_HOST:-}" ] && id "$OMNI_DOCKER_USER" > /dev/null 2>&1; then
-  DOCKER_HOST="unix:///run/user/$(id -u "$OMNI_DOCKER_USER")/docker.sock"
+# O Omni roda no Docker rootless do usuário omni (não no Docker do sistema, que é o do filtroAPP).
+# O cron não carrega o ~/.profile: usa o socket do próprio usuário se ninguém disse outro.
+if [ -z "${DOCKER_HOST:-}" ] && [ -S "/run/user/$(id -u)/docker.sock" ]; then
+  export DOCKER_HOST="unix:///run/user/$(id -u)/docker.sock"
 fi
-export DOCKER_HOST
 BACKUP_NICE_LEVEL="${BACKUP_NICE_LEVEL:-19}"
 BACKUP_DOCKER_CPUS="${BACKUP_DOCKER_CPUS:-0.5}"
 
@@ -105,9 +104,9 @@ prune_local_backups() {
 }
 
 case "${DOCKER_HOST:-}" in
-  unix://*) [ -S "${DOCKER_HOST#unix://}" ] || { echo "[backup] socket do Docker não encontrado: $DOCKER_HOST (o usuário $OMNI_DOCKER_USER está com o Docker rootless no ar?)" >&2; false; } ;;
+  unix://*) [ -S "${DOCKER_HOST#unix://}" ] || { echo "[backup] socket do Docker não encontrado: $DOCKER_HOST (o Docker rootless deste usuário está no ar?)" >&2; false; } ;;
 esac
-docker inspect "${PROJETO}-postgres-1" > /dev/null 2>&1 || { echo "[backup] o Postgres do Omni (${PROJETO}-postgres-1) não aparece em $DOCKER_HOST" >&2; false; }
+docker inspect "${PROJETO}-postgres-1" > /dev/null 2>&1 || { echo "[backup] o Postgres do Omni (${PROJETO}-postgres-1) não aparece no Docker deste usuário (${DOCKER_HOST:-padrão})" >&2; false; }
 
 umask 077
 mkdir -p "$BACKUP_ROOT"
