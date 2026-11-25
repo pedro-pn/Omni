@@ -114,6 +114,8 @@ services:
       WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
       # Chamadas pessoais do WhatsApp (perfil "chamadas"): serviço de voz pela rede interna
       CHAMADAS_HABILITADAS: ${CHAMADAS_HABILITADAS:-off}
+      # CSP das páginas (E12): "relatorio" só relata violações (Administração → Erros); "aplicar" bloqueia.
+      CSP_MODO: ${CSP_MODO:-relatorio}
       # Abre as gravações cifradas do SharePoint para tocar (a mesma chave do worker)
       GRAVACOES_CHAVE_MESTRA: ${GRAVACOES_CHAVE_MESTRA:-}
       CHAMADAS_SERVICO_URL: ${CHAMADAS_SERVICO_URL:-}
