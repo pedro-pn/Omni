@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   CheckCheck,
+  Clock,
   Download,
   FileText,
   Image,
@@ -85,6 +86,8 @@ import { acaoLida, BotaoLida, useDeslizarLados, useMenuDeContexto } from "../com
 import { AvisoNaoLidas, SetaParaBaixo, useRolagemDoChat } from "../comum/RolagemDoChat.tsx";
 import { VincularContato } from "../unica/Vincular.tsx";
 import { ImagemComPrevia } from "../comum/ImagemComPrevia.tsx";
+import { PreviaDoLink, primeiroLink, TextoComLinks } from "./Links.tsx";
+import { corDoAutor, FotoDoAutor } from "./AutorDoGrupo.tsx";
 
 /**
  * Conversas do WhatsApp (Fase 7). As conversas e as mensagens vêm do webhook da
@@ -193,7 +196,7 @@ function mostrarAviso(a: AvisoConclusao) {
   for (const f of ouvintesAviso) f();
 }
 
-/** Concluir ou reabrir uma conversa (só para esta pessoa). Some da lista na hora; o servidor confirma. */
+/** Arquivar ou desarquivar uma conversa (só para esta pessoa; volta sozinha com mensagem nova). Some da lista na hora; o servidor confirma. */
 export function useConcluirConversa() {
   const qc = useQueryClient();
   return useMutation({
@@ -246,7 +249,7 @@ export function AvisoConversas() {
       <Archive size={18} aria-hidden className="shrink-0" />
       <span className="min-w-0 flex-1">
         <b className="block truncate">{aviso.nome}</b>
-        Conversa concluída. Volta sozinha quando chegar algo novo.
+        Conversa arquivada. Volta sozinha quando chegar mensagem nova.
       </span>
       {conversa && (
         <button
@@ -510,7 +513,9 @@ export function ListaConversas({
   onSelecionar: (id: string) => void;
   busca: string;
 }) {
-  const [verConcluidas, setVerConcluidas] = useState(false);
+  // Arquivadas (como no WhatsApp Web): as que a pessoa arquivou (voltam com mensagem nova)
+  // e as que mantém arquivadas (menu ⋮, não voltam), numa linha no topo da lista.
+  const [verArquivadas, setVerArquivadas] = useState(false);
   const [mostrarQr, setMostrarQr] = useState(false);
   const meu = useQuery({
     queryKey: ["whatsapp", "meu"],
@@ -525,20 +530,27 @@ export function ListaConversas({
   const termo = busca.trim().toLowerCase();
   const org = useOrganizacao("conversa");
   const [aba, setAba] = useAbaOrganizacao("conversa");
-  // Pastas e arquivo (0059): a aba escolhe o conjunto; dentro dela, inbox zero (concluir).
-  const daAba = filtrarPorAba(conversas, (c) => c.id, org.data, aba);
-  const concluidas =
-    aba === "arquivadas" ? 0 : daAba.filter((c) => c.concluida).length;
-  // A busca acha tudo, inclusive as concluídas e as arquivadas; sem busca, vale a aba.
+  // A aba "Arquivadas" das pastas (0059) passou para a linha do topo.
+  useEffect(() => {
+    if (aba === "arquivadas") {
+      setAba("todas");
+      setVerArquivadas(true);
+    }
+  }, [aba, setAba]);
+  const mantida = (c: ConversaResumo) => Boolean(org.data?.itens[c.id]?.arquivado);
+  const arquivada = (c: ConversaResumo) => c.concluida || mantida(c);
+  const arquivadas = conversas.filter(arquivada);
+  const daAba = filtrarPorAba(conversas, (c) => c.id, org.data, aba === "arquivadas" ? "todas" : aba);
+  // A busca acha tudo, inclusive as arquivadas; sem busca, vale a aba (ou a lista das arquivadas).
   const filtradas = termo
     ? conversas.filter((c) =>
         [c.nome, c.telefone ?? "", c.numero.rotulo, c.previa ?? ""].some((x) =>
           x.toLowerCase().includes(termo),
         ),
       )
-    : aba === "arquivadas"
-      ? daAba
-      : daAba.filter((c) => c.concluida === verConcluidas);
+    : verArquivadas
+      ? arquivadas
+      : daAba.filter((c) => !c.concluida);
   // Sem conversas e sem o WhatsApp conectado: o QR code já fica na tela.
   if (!conversas.length && precisaConectar) return <ConectarWhatsApp />;
   if (!conversas.length) {
@@ -558,7 +570,7 @@ export function ListaConversas({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <BarraDoWhatsApp numero={meu.data?.numero ?? null} onSelecionar={onSelecionar} />
-      {!termo && <AbasOrganizacao tipo="conversa" aba={aba} onAba={setAba} />}
+      {!termo && !verArquivadas && <AbasOrganizacao tipo="conversa" aba={aba} onAba={setAba} semArquivadas />}
       <ul className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {precisaConectar && (
           <li className="border-b border-linha bg-superficie-2">
@@ -586,15 +598,29 @@ export function ListaConversas({
             )}
           </li>
         )}
-        {verConcluidas && !termo && (
-          <li className="flex items-center justify-between border-b border-linha bg-superficie-2 px-4 py-2 text-sm">
-            <span className="text-muted">Concluídas</span>
+        {!termo && verArquivadas && (
+          <li className="flex items-center gap-2 border-b border-linha bg-superficie-2 px-3 py-2 text-sm">
             <button
               type="button"
-              onClick={() => setVerConcluidas(false)}
-              className="font-medium text-floresta-texto hover:underline"
+              onClick={() => setVerArquivadas(false)}
+              aria-label="Voltar às conversas"
+              className="flex size-8 items-center justify-center rounded-full hover:bg-superficie"
             >
-              Voltar às conversas
+              <ArrowLeft size={18} aria-hidden />
+            </button>
+            <span className="font-medium">Arquivadas</span>
+          </li>
+        )}
+        {!termo && !verArquivadas && arquivadas.length > 0 && (
+          <li className="border-b border-linha">
+            <button
+              type="button"
+              onClick={() => setVerArquivadas(true)}
+              className="flex w-full items-center gap-4 px-6 py-3 text-left text-sm hover:bg-superficie-2"
+            >
+              <Archive size={18} aria-hidden className="text-floresta-texto" />
+              <span className="flex-1 font-medium">Arquivadas</span>
+              <span className="text-xs font-semibold text-floresta-texto">{arquivadas.length}</span>
             </button>
           </li>
         )}
@@ -610,29 +636,20 @@ export function ListaConversas({
           <li className="px-6 py-8 text-center text-muted">
             {termo
               ? "Nada encontrado."
-              : aba === "arquivadas"
+              : verArquivadas
                 ? "Nenhuma conversa arquivada."
-                : verConcluidas
-                  ? "Nenhuma conversa concluída."
-                  : aba !== "todas" && !daAba.length
+                : aba !== "todas" && !daAba.length
                     ? "Nenhuma conversa nesta pasta. Use o menu ⋮ de uma conversa para pôr aqui."
                     : "Tudo em dia. As conversas voltam sozinhas quando chegar algo novo."}
-          </li>
-        )}
-        {!termo && !verConcluidas && concluidas > 0 && (
-          <li className="px-4 py-3 text-center">
-            <button
-              type="button"
-              onClick={() => setVerConcluidas(true)}
-              className="text-sm text-muted hover:text-ink hover:underline"
-            >
-              Ver concluídas ({concluidas})
-            </button>
           </li>
         )}
       </ul>
     </div>
   );
+}
+
+function prefetchMensagens(qc: ReturnType<typeof useQueryClient>, chatId: string) {
+  void qc.prefetchQuery({ queryKey: ["whatsapp", "mensagens", chatId], queryFn: () => mensagensDaConversa({ data: { chatId } }), staleTime: 15_000 });
 }
 
 function ItemConversa({
@@ -644,12 +661,13 @@ function ItemConversa({
   selecionada: boolean;
   onSelecionar: (id: string) => void;
 }) {
+  const qc = useQueryClient();
   const concluir = useConcluirConversa();
   const marcar = useMarcarConversaLida();
   // Não lida: mensagens do contato depois da leitura, ou marcada como não lida (0075).
   const lida = c.naoLidas === 0 && !c.marcadaNaoLida;
   const alternarLida = () => marcar.mutate({ chatId: c.id, lida: !lida });
-  const concluirOuReabrir = { rotulo: c.concluida ? "Reabrir" : "Concluir", icone: c.concluida ? ArchiveRestore : Archive, acao: () => concluir.mutate({ conversa: c, concluir: !c.concluida }) };
+  const concluirOuReabrir = { rotulo: c.concluida ? "Desarquivar" : "Arquivar", icone: c.concluida ? ArchiveRestore : Archive, acao: () => concluir.mutate({ conversa: c, concluir: !c.concluida }) };
   const { dx, moveu, fundo, handlers } = useDeslizarLados({ direita: c.podeResponder ? acaoLida(lida, alternarLida) : undefined, esquerda: concluirOuReabrir });
   const menu = useMenuDeContexto([...(c.podeResponder ? [acaoLida(lida, alternarLida)] : []), concluirOuReabrir]);
   return (
@@ -662,6 +680,9 @@ function ItemConversa({
           if (moveu.current) return; // foi um deslize, não um toque
           onSelecionar(c.id);
         }}
+        // Busca as mensagens antes do clique (passar o mouse ou focar): a conversa abre na hora.
+        onMouseEnter={() => prefetchMensagens(qc, c.id)}
+        onFocus={() => prefetchMensagens(qc, c.id)}
         aria-current={selecionada ? "true" : undefined}
         style={dx ? { transform: `translateX(${dx}px)` } : undefined}
         className={`relative flex w-full touch-pan-y items-center gap-3 bg-superficie py-3 pl-4 pr-10 text-left hover:bg-superficie-2 ${selecionada ? "bg-superficie-2" : ""}`}
@@ -689,14 +710,14 @@ function ItemConversa({
           </span>
           <span className="block truncate text-xs text-muted">
             WhatsApp · {c.numero.rotulo}
-            {c.concluida ? " · Concluída" : ""}
+            {c.concluida ? " · Arquivada" : ""}
           </span>
         </span>
       </button>
       {dx === 0 && (
         <div className="absolute bottom-2 right-2 flex items-center gap-1">
           {c.podeResponder && <BotaoLida lida={lida} alternar={alternarLida} />}
-          <MenuOrganizar tipo="conversa" itemId={c.id} nome={c.nome} />
+          <MenuOrganizar tipo="conversa" itemId={c.id} nome={c.nome} rotulos={{ arquivar: "Manter arquivada", desarquivar: "Tirar das arquivadas" }} />
         </div>
       )}
       {menu.menu}
@@ -813,14 +834,24 @@ function LinhaDeChamada({ m }: { m: MensagemWhatsApp }) {
   );
 }
 
-function Balao({ m, grupo }: { m: MensagemWhatsApp; grupo: boolean }) {
+/** Grupo: a mensagem abre uma sequência (mostra nome e foto) se a anterior é de outra pessoa, de outro dia ou não é mensagem. */
+function inicioDaSequencia(itens: Array<{ k: string; m?: MensagemWhatsApp }>, i: number, novoDia: boolean): boolean {
+  const atual = itens[i]?.m;
+  const antes = itens[i - 1]?.m;
+  if (novoDia || !atual || !antes || antes.chamada || antes.deMim !== atual.deMim) return true;
+  return (antes.autorId ?? antes.autor) !== (atual.autorId ?? atual.autor);
+}
+
+function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo: boolean; chatId?: string; /** Primeira de uma sequência da mesma pessoa (grupo: nome e foto). */ inicio?: boolean }) {
   if (m.chamada) return <LinhaDeChamada m={m} />;
+  const comAutor = grupo && !m.deMim;
   const Icone = ICONE_TIPO[m.tipo];
   const temMidia =
     ["imagem", "figurinha", "audio", "video", "documento"].includes(m.tipo) &&
     !m.ensaio;
   return (
-    <div className={`flex ${m.deMim ? "justify-end" : "justify-start"}`}>
+    <div className={`flex gap-2 ${m.deMim ? "justify-end" : "justify-start"} ${comAutor && !inicio ? "pl-10" : ""} ${m.pendente ? "motion-safe:animate-[omni-entrar_160ms_ease-out]" : ""}`}>
+      {comAutor && inicio && chatId && <FotoDoAutor chatId={chatId} autorId={m.autorId} nome={m.autor} />}
       <div
         className={`max-w-[80%] rounded-lg px-3 py-2 text-sm shadow-sm ${
           m.ensaio
@@ -830,8 +861,8 @@ function Balao({ m, grupo }: { m: MensagemWhatsApp; grupo: boolean }) {
               : "bg-superficie"
         }`}
       >
-        {grupo && !m.deMim && m.autor && (
-          <p className="mb-0.5 text-xs font-semibold text-floresta-texto">
+        {comAutor && inicio && m.autor && (
+          <p className="mb-0.5 text-xs font-semibold" style={{ color: corDoAutor(m.autorId ?? m.autor) }}>
             {m.autor}
           </p>
         )}
@@ -849,9 +880,8 @@ function Balao({ m, grupo }: { m: MensagemWhatsApp; grupo: boolean }) {
             {m.arquivo ? `: ${m.arquivo}` : ""}
           </p>
         )}
-        {m.texto && (
-          <p className="whitespace-pre-wrap break-words">{m.texto}</p>
-        )}
+        {m.tipo === "texto" && primeiroLink(m.texto) && <PreviaDoLink url={primeiroLink(m.texto)!} deMim={m.deMim && !m.ensaio} />}
+        {m.texto && <TextoComLinks texto={m.texto} deMim={m.deMim && !m.ensaio} />}
         <p
           className={`mt-0.5 flex items-center justify-end gap-1 text-[11px] ${m.deMim && !m.ensaio ? "text-white/70" : "text-muted"}`}
         >
@@ -871,6 +901,7 @@ function Balao({ m, grupo }: { m: MensagemWhatsApp; grupo: boolean }) {
               className="opacity-60"
             />
           )}
+          {m.pendente && <Clock size={13} aria-label="Enviando" className="opacity-70" />}
           {m.deMim && m.status === "enviada" && (
             <Check size={14} aria-label="Enviada" className="opacity-60" />
           )}
@@ -908,6 +939,8 @@ export function PainelConversa({
   const q = useQuery({
     queryKey: ["whatsapp", "mensagens", conversa.id],
     queryFn: () => mensagensDaConversa({ data: { chatId: conversa.id } }),
+    // Já vista: aparece na hora; o tempo real (e esta releitura) trazem o que mudou.
+    staleTime: 15_000,
   });
   // Histórico baixado neste aparelho (só o dono do número): junta com o servidor sem repetir.
   const aparelho = useMensagensDoAparelho(conversa.id, conversa.numero.id, conversa.podeResponder);
@@ -1022,7 +1055,7 @@ export function PainelConversa({
             title={
               conversa.concluida
                 ? "Reabrir: volta para a sua lista"
-                : "Concluir: sai da sua lista até chegar algo novo"
+                : "Arquivar: sai da sua lista até chegar mensagem nova"
             }
             onClick={() => {
               concluir.mutate({ conversa, concluir: !conversa.concluida });
@@ -1036,7 +1069,7 @@ export function PainelConversa({
               <Check size={18} aria-hidden />
             )}
             <span className="hidden sm:inline">
-              {conversa.concluida ? "Reabrir" : "Concluir"}
+              {conversa.concluida ? "Desarquivar" : "Arquivar"}
             </span>
           </button>
         )}
@@ -1077,7 +1110,7 @@ export function PainelConversa({
             </button>
           </div>
         )}
-        {itens?.map((item) => {
+        {itens?.map((item, i) => {
           const em = new Date(item.em);
           const d = em.toLocaleDateString("pt-BR", {
             weekday: "long",
@@ -1096,7 +1129,11 @@ export function PainelConversa({
                 </p>
               )}
               {rolagem.divisor?.id === item.id && <AvisoNaoLidas n={rolagem.divisor.n} />}
-              {item.k === "wa" ? <Balao m={item.m} grupo={conversa.grupo} /> : <CartaoEmail e={item.e} onAbrir={(id) => contato?.onAbrirEmail(id)} />}
+              {item.k === "wa" ? (
+                <Balao m={item.m} grupo={conversa.grupo} chatId={conversa.id} inicio={inicioDaSequencia(itens, i, novoDia)} />
+              ) : (
+                <CartaoEmail e={item.e} onAbrir={(id) => contato?.onAbrirEmail(id)} />
+              )}
             </div>
           );
         })}
@@ -1313,8 +1350,35 @@ function Resposta({ conversa }: { conversa: ConversaResumo }) {
     queryFn: () => modoEnvioWhatsApp(),
     staleTime: Infinity,
   });
+  // Como no WhatsApp Web: a mensagem entra na conversa na hora (com o relógio) e a caixa já
+  // fica livre; a confirmação do servidor troca pela de verdade. Se der erro, o texto volta.
+  const chaveMensagens = ["whatsapp", "mensagens", conversa.id];
   const enviar = useMutation({
-    mutationFn: async () => {
+    onMutate: async (v: { texto: string; arquivo: File | null }) => {
+      setTexto("");
+      setArquivo(null);
+      if (seletor.current) seletor.current.value = "";
+      await qc.cancelQueries({ queryKey: chaveMensagens });
+      const pendente: MensagemWhatsApp = {
+        id: `pendente-${crypto.randomUUID()}`,
+        deMim: true,
+        autor: null,
+        tipo: v.arquivo ? "documento" : "texto",
+        texto: v.texto.trim() || null,
+        arquivo: v.arquivo?.name ?? null,
+        em: new Date().toISOString(),
+        status: null,
+        pendente: true,
+      };
+      qc.setQueryData<MensagemWhatsApp[]>(chaveMensagens, (atual) => [...(atual ?? []), pendente]);
+      return { pendente };
+    },
+    onError: (_e, v, ctx) => {
+      qc.setQueryData<MensagemWhatsApp[]>(chaveMensagens, (atual) => (atual ?? []).filter((m) => m.id !== ctx?.pendente.id));
+      setTexto(v.texto);
+      setArquivo(v.arquivo);
+    },
+    mutationFn: async ({ texto, arquivo }: { texto: string; arquivo: File | null }) => {
       if (!arquivo)
         return enviarMensagemWhatsApp({ data: { chatId: conversa.id, texto } });
       if (arquivo.size > 16 * 1024 * 1024)
@@ -1332,18 +1396,14 @@ function Resposta({ conversa }: { conversa: ConversaResumo }) {
         throw new Error(corpo.erro ?? "Não foi possível enviar o arquivo.");
       return corpo;
     },
-    onSuccess: () => {
-      setTexto("");
-      setArquivo(null);
-      if (seletor.current) seletor.current.value = "";
-      void qc.invalidateQueries({
-        queryKey: ["whatsapp", "mensagens", conversa.id],
-      });
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: chaveMensagens });
+      void qc.invalidateQueries({ queryKey: ["whatsapp", "conversas"] });
     },
   });
   const submeter = (e: FormEvent) => {
     e.preventDefault();
-    if (texto.trim() || arquivo) enviar.mutate();
+    if (texto.trim() || arquivo) enviar.mutate({ texto, arquivo });
   };
   if (modo.data?.modo === "desligado") {
     return (

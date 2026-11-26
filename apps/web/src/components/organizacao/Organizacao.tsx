@@ -81,10 +81,13 @@ export function AbasOrganizacao({
   tipo,
   aba,
   onAba,
+  semArquivadas = false,
 }: {
   tipo: TipoOrganizado;
   aba: AbaOrganizacao;
   onAba: (a: AbaOrganizacao) => void;
+  /** Conversas: as arquivadas ficam na linha "Arquivadas" do topo da lista, como no WhatsApp. */
+  semArquivadas?: boolean;
 }) {
   const qc = useQueryClient();
   const org = useOrganizacao(tipo);
@@ -144,15 +147,17 @@ export function AbasOrganizacao({
               <Folder size={13} aria-hidden /> {p.nome}
             </button>
           ))}
-          <button
-            type="button"
-            role="tab"
-            aria-selected={aba === "arquivadas"}
-            onClick={() => onAba("arquivadas")}
-            className={`${abaClasse(aba === "arquivadas")} flex items-center gap-1`}
-          >
-            <Archive size={13} aria-hidden /> Arquivadas
-          </button>
+          {!semArquivadas && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={aba === "arquivadas"}
+              onClick={() => onAba("arquivadas")}
+              className={`${abaClasse(aba === "arquivadas")} flex items-center gap-1`}
+            >
+              <Archive size={13} aria-hidden /> Arquivadas
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -302,10 +307,13 @@ export function MenuOrganizar({
   tipo,
   itemId,
   nome,
+  rotulos = { arquivar: "Arquivar", desarquivar: "Desarquivar" },
 }: {
   tipo: TipoOrganizado;
   itemId: string;
   nome: string;
+  /** Conversas: o arquivo permanente é "Manter arquivada" (o Arquivar delas volta com mensagem nova). */
+  rotulos?: { arquivar: string; desarquivar: string };
 }) {
   const qc = useQueryClient();
   const org = useOrganizacao(tipo);
@@ -407,7 +415,7 @@ export function MenuOrganizar({
             ) : (
               <Archive size={14} aria-hidden />
             )}{" "}
-            {atual?.arquivado ? "Desarquivar" : "Arquivar"}
+            {atual?.arquivado ? rotulos.desarquivar : rotulos.arquivar}
           </button>
         </div>
       )}

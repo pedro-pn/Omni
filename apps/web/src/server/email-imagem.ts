@@ -86,7 +86,7 @@ function urlPermitida(url: URL): boolean {
   return /\./.test(host) && !/\.(local|internal|localhost|lan|home|corp)$/i.test(host) && host.toLowerCase() !== "localhost";
 }
 
-function pedir(url: URL, sinal: AbortSignal): Promise<http.IncomingMessage> {
+function pedir(url: URL, sinal: AbortSignal, accept = "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8"): Promise<http.IncomingMessage> {
   return new Promise((resolve, reject) => {
     const lib = url.protocol === "https:" ? https : http;
     const req = lib.get(
@@ -94,7 +94,7 @@ function pedir(url: URL, sinal: AbortSignal): Promise<http.IncomingMessage> {
       {
         lookup: lookupSeguro,
         signal: sinal,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; OmniEmailImagens/1.0)", Accept: "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8" },
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; OmniEmailImagens/1.0)", Accept: accept },
         agent: false,
       },
       resolve,
@@ -104,7 +104,16 @@ function pedir(url: URL, sinal: AbortSignal): Promise<http.IncomingMessage> {
 }
 
 /** Busca a imagem com as travas acima. */
-export async function buscarImagem(endereco: string): Promise<ImagemBuscada> {
+export function buscarImagem(endereco: string): Promise<ImagemBuscada> {
+  return buscarComTravas(endereco, { aceita: (tipo) => /^image\/[a-z0-9.+-]+$/.test(tipo), maxBytes: MAX_BYTES });
+}
+
+/**
+ * Busca qualquer endereço da internet com as mesmas travas (só http/https nas portas padrão, nada
+ * da rede interna nem por redirecionamento, tempo e tamanho limitados); `aceita` confere o tipo.
+ * Usada também pela prévia dos links do WhatsApp (HTML, até `maxBytes`).
+ */
+export async function buscarComTravas(endereco: string, opcoes: { aceita: (tipo: string) => boolean; maxBytes: number; accept?: string }): Promise<ImagemBuscada> {
   const sinal = AbortSignal.timeout(TEMPO_MS);
   let url: URL;
   try {
@@ -114,7 +123,7 @@ export async function buscarImagem(endereco: string): Promise<ImagemBuscada> {
   }
   for (let i = 0; i <= MAX_REDIRECIONAMENTOS; i += 1) {
     if (!urlPermitida(url)) throw new ImagemIndisponivel("endereço não permitido");
-    const resposta = await pedir(url, sinal).catch((e: { code?: string }) => {
+    const resposta = await pedir(url, sinal, opcoes.accept).catch((e: { code?: string }) => {
       throw new ImagemIndisponivel(e?.code === "EBLOQUEADO" ? "endereço bloqueado" : "não respondeu");
     });
     const status = resposta.statusCode ?? 0;
@@ -124,11 +133,11 @@ export async function buscarImagem(endereco: string): Promise<ImagemBuscada> {
       continue;
     }
     const tipo = String(resposta.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
-    if (status !== 200 || !/^image\/[a-z0-9.+-]+$/.test(tipo)) {
+    if (status !== 200 || !opcoes.aceita(tipo)) {
       resposta.resume();
-      throw new ImagemIndisponivel("não é imagem");
+      throw new ImagemIndisponivel("tipo não aceito");
     }
-    if (Number(resposta.headers["content-length"] ?? 0) > MAX_BYTES) {
+    if (Number(resposta.headers["content-length"] ?? 0) > opcoes.maxBytes) {
       resposta.destroy();
       throw new ImagemIndisponivel("grande demais");
     }
@@ -137,7 +146,12 @@ export async function buscarImagem(endereco: string): Promise<ImagemBuscada> {
     try {
       for await (const parte of resposta) {
         total += (parte as Buffer).length;
-        if (total > MAX_BYTES) {
+        if (total > opcoes.maxBytes) {
+          // Página: o começo basta (as meta tags ficam no <head>).
+          if (opcoes.accept?.includes("text/html")) {
+            resposta.destroy();
+            break;
+          }
           resposta.destroy();
           throw new ImagemIndisponivel("grande demais");
         }

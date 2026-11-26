@@ -252,7 +252,9 @@ export function AppShell({ me }: { me: Me }) {
   });
   const missao = view === "missoes" ? (missoes.data?.find((m) => m.id === missaoId) ?? null) : null;
   const naTudo = view === "tudo" && !semAcesso;
-  const conversas = useConversas((view === "conversas" || naTudo) && !semAcesso && liberado("whatsapp"));
+  // Sempre ligada (com o módulo): a contagem de não lidas vai para o título da aba (como no WhatsApp Web).
+  const conversas = useConversas(!semAcesso && liberado("whatsapp"));
+  useNaoLidasNoTitulo(conversas.data);
   const correspondentes = useCorrespondentes(naTudo || (view === "conversas" && !semAcesso));
   const agenda = useAgenda(conversas.data, correspondentes.data, (naTudo || view === "conversas") && !semAcesso);
   const contatosUnicos = juntarContatos(conversas.data ?? [], correspondentes.data ?? [], agenda.data ?? []);
@@ -670,3 +672,27 @@ export function AppShell({ me }: { me: Me }) {
     </div>
   );
 }
+
+/**
+ * "(3) Omni" no título da aba, como o WhatsApp Web: quantas conversas têm mensagem não lida
+ * (sem as arquivadas). O título de cada tela muda na navegação; o prefixo volta sozinho. No app
+ * instalado, o número também aparece no ícone (Badging API, onde houver).
+ */
+function useNaoLidasNoTitulo(conversas: { naoLidas: number; marcadaNaoLida: boolean; concluida: boolean }[] | undefined) {
+  const n = (conversas ?? []).filter((c) => !c.concluida && (c.naoLidas > 0 || c.marcadaNaoLida)).length;
+  useEffect(() => {
+    const aplicar = () => {
+      const base = document.title.replace(/^\(\d+\+?\)\s*/, "");
+      const novo = n > 0 ? `(${n > 99 ? "99+" : n}) ${base}` : base;
+      if (document.title !== novo) document.title = novo;
+    };
+    aplicar();
+    const titulo = document.querySelector("title");
+    const mo = titulo ? new MutationObserver(aplicar) : null;
+    if (titulo) mo!.observe(titulo, { childList: true, characterData: true, subtree: true });
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    (n > 0 ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => undefined);
+    return () => mo?.disconnect();
+  }, [n]);
+}
+

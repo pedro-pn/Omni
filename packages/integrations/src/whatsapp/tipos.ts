@@ -51,6 +51,8 @@ export interface WhatsApp {
    * endereço certo (o WhatsApp pode tirar o 9 de celulares antigos do Brasil).
    */
   numerosNoWhatsApp(instancia: string, numeros: string[]): Promise<{ numero: string; existe: boolean; jid: string | null }[]>;
+  /** Endereço da foto de perfil de alguém (participante de grupo), ou null (sem foto ou privada). */
+  fotoDoPerfil(instancia: string, jid: string): Promise<string | null>;
   /** Nome e tamanho de um grupo; null se não responder a tempo. */
   infoGrupo(instancia: string, jid: string): Promise<{ nome: string | null; participantes: number | null } | null>;
   /** Mensagens guardadas no provedor, em páginas (registros no formato do provedor; ler com lerMensagemEvolution). */

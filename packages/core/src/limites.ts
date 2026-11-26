@@ -69,6 +69,8 @@ export const LIMITES_FUNCOES: Record<string, RegraDeLimite[]> = {
   registrarNoPrismaEmLote: [{ nome: "prisma-lote", max: 5, janelaMs: MIN }],
   enviarParticipanteAoPrisma: [{ nome: "prisma-escrita", max: 30, janelaMs: MIN }],
   enviarContatoAoPrisma: [{ nome: "prisma-escrita", max: 30, janelaMs: MIN }],
+  // Prévia dos links do WhatsApp: o servidor busca a página (com cache).
+  previaDeLink: [{ nome: "link-previa", max: 60, janelaMs: MIN }],
   // Credenciais
   criarChave: [{ nome: "chave-api", max: 5, janelaMs: MIN }],
   // Login interno (0078): o banco já limita a recuperação e a confirmação por conta; aqui, por IP/sessão.

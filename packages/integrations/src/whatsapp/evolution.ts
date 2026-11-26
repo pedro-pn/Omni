@@ -273,6 +273,13 @@ export class EvolutionClient implements WhatsApp {
     });
   }
 
+  async fotoDoPerfil(instancia: string, jid: string): Promise<string | null> {
+    const r = await this.chamar("POST", "chat/fetchProfilePictureUrl", instancia, { number: jid }, { timeoutMs: 8_000 });
+    if (r.status >= 400) return null;
+    const url = (r.dados as { profilePictureUrl?: unknown } | null)?.profilePictureUrl;
+    return typeof url === "string" && url ? url : null;
+  }
+
   async infoGrupo(instancia: string, jid: string) {
     if (!/^[\d-]{6,40}@g\.us$/.test(jid)) throw new WhatsAppError("Grupo inválido", 400, "destino_invalido");
     let r;
