@@ -33,13 +33,21 @@ describe.skipIf(!available)("retenção dos dados de negócio", () => {
   let worker: pg.Pool;
   const tag = randomUUID().slice(0, 8);
   const ids: Record<string, string> = {};
+  // Códigos 6xxx: nenhum outro teste usa (eles fixam 7x01, 8001–8008, 9x01). Em sequência, depois dos
+  // que rodadas anteriores deixaram no banco, para não repetir.
+  let proximoCodigo = 0;
   const q1 = async (texto: string, valores: unknown[] = []) => (await owner.query<{ id: string }>(texto, valores)).rows[0]!.id;
 
   async function missao(nome: string, ativa: boolean, encerrada: string | null) {
+    if (!proximoCodigo) {
+      const { rows } = await owner.query<{ c: number }>("SELECT coalesce(max(code::int), 5999) + 1 AS c FROM missions WHERE code BETWEEN '6000' AND '6999'");
+      proximoCodigo = rows[0]!.c;
+    }
+    if (proximoCodigo > 6990) throw new Error("Códigos 6xxx esgotados no banco de teste: recrie o banco.");
     ids[nome] = await q1(
       `INSERT INTO missions (code, filtroapp_project_id, client_name, is_active, filtroapp_updated_at, cycle_closed_at)
        VALUES ($1, $2, 'Cliente', $3, now(), now() - $4::interval) RETURNING id`,
-      [String(9_000 + Math.floor(Math.random() * 999)), `ret-${tag}-${nome}`, ativa, encerrada],
+      [String(proximoCodigo++), `ret-${tag}-${nome}`, ativa, encerrada],
     );
     const msg = await q1("INSERT INTO mission_messages (mission_id, channel, body) VALUES ($1, 'interno', $2) RETURNING id", [ids[nome], `msg ${tag} ${nome}`]);
     await owner.query("INSERT INTO mission_message_files (message_id, name, mime, size, sp_drive_id, sp_item_id) VALUES ($1, 'a.pdf', 'application/pdf', 1, 'drive', $2)", [msg, `canal-${tag}-${nome}`]);
