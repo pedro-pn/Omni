@@ -1,4 +1,4 @@
-# Plano de maturidade: entregas E01 a E23
+# Plano de maturidade: entregas E01 a E24
 
 O Omni é medido por uma régua de 13 pilares (repositório e CI, testes, deploy e recuperação,
 autenticação, CSP, contratos de API, dependências, LGPD, custos e limites, desempenho,
@@ -40,6 +40,8 @@ registro do que foi feito e de onde está.
 | E16 CSRF | 4.3 | ✅ | Conferência de origem em toda alteração (`apps/web/src/server/csrf.ts`). |
 | E17 Revisão de segurança | 8 | 🟡 congelada | `SECURITY.md` e aviso privado de falhas no GitHub. Falta a revisão de segurança registrada. |
 | E23 Teste instável da cifra das gravações | 2 | ✅ | Corrigido na causa: de 1,95 s para 34 ms, sem aumentar o limite. |
+
+| E24 Página de manutenção | 3 | 🟡 | Página própria do Omni no Caddy (503, sem nada de fora) quando o web não responde e `deploy/manutencao.sh` para manutenção de propósito; o `publicar.sh` não encerra uma manutenção ligada à mão. Falta subir o trecho no Caddy do `infra-proxy` e conferir no staging. |
 
 ## Etapa 3: repositório público
 
