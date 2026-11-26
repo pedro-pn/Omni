@@ -22,7 +22,7 @@ jobs:
         with:
           go-version-file: experiments/whatsapp-chamada/go.mod
           cache-dependency-path: experiments/whatsapp-chamada/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
       - run: node --test audio-worklet.test.mjs
