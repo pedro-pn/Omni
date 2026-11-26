@@ -92,6 +92,8 @@ describe("eventos do webhook", () => {
       texto: "Bom dia, a equipe chega que horas?",
       arquivo: null,
       em: new Date(1793800000 * 1000),
+      citada: null,
+      encaminhada: false,
     });
     expect(JSON.stringify(e)).not.toContain("segredo-da-instancia");
   });
@@ -235,5 +237,38 @@ describe("histórico e mídia", () => {
     expect(r).toEqual({ id: "3EB0F1", jid: "120363000000000001@g.us" });
     expect(chamadas[0]!.body).toMatchObject({ number: "120363000000000001@g.us", mediatype: "document", mimetype: "application/pdf", caption: "Segue a medição", media: Buffer.from("pdf").toString("base64"), fileName: "Medição.pdf" });
     await expect(c.enviarArquivo("omni-abc123", "120363000000000001@g.us", { conteudo: Buffer.alloc(16 * 1024 * 1024 + 1), mimetype: "image/png", nome: "x.png" })).rejects.toMatchObject({ code: "arquivo_invalido" });
+  });
+});
+
+describe("ações nas mensagens pelo webhook (0087)", () => {
+  const upsert = (message: Record<string, unknown>, key: Record<string, unknown> = {}) =>
+    lerEventoWebhook({ event: "messages.upsert", instance: "omni-teste01", data: { key: { remoteJid: "5547900000078@s.whatsapp.net", fromMe: false, id: "M2", ...key }, pushName: "Bruno", message, messageTimestamp: 1764100000 } });
+
+  it("resposta citada e encaminhada", () => {
+    const [e] = upsert({ extendedTextMessage: { text: "Pode", contextInfo: { stanzaId: "M1", participant: "5547900000011@s.whatsapp.net", quotedMessage: { conversation: "Posso ir amanhã?" }, isForwarded: true } } });
+    expect(e).toMatchObject({ tipo: "mensagem", texto: "Pode", citada: { id: "M1", texto: "Posso ir amanhã?", autorJid: "5547900000011@s.whatsapp.net" }, encaminhada: true });
+    const [foto] = upsert({ conversation: "ok", extendedTextMessage: undefined, imageMessage: undefined, contextInfo: undefined });
+    expect(foto).toMatchObject({ citada: null, encaminhada: false });
+  });
+
+  it("reação (e tirar a reação), num grupo com o participante", () => {
+    const grupo = { remoteJid: "120363000000000001@g.us", participant: "5547900000011@s.whatsapp.net" };
+    expect(upsert({ reactionMessage: { key: { id: "M1" }, text: "👍" } }, grupo)).toEqual([
+      expect.objectContaining({ tipo: "reacao", chatJid: "120363000000000001@g.us", alvoId: "M1", emoji: "👍", autorJid: "5547900000011@s.whatsapp.net", deMim: false }),
+    ]);
+    expect(upsert({ reactionMessage: { key: { id: "M1" }, text: "" } }, grupo)[0]).toMatchObject({ tipo: "reacao", emoji: "" });
+  });
+
+  it("apagada e editada (na mensagem de protocolo e nos eventos à parte da Evolution) e fixada", () => {
+    expect(upsert({ protocolMessage: { key: { id: "M1" }, type: "REVOKE" } })[0]).toMatchObject({ tipo: "apagada", id: "M1", chatJid: "5547900000078@s.whatsapp.net" });
+    expect(upsert({ protocolMessage: { key: { id: "M1" }, type: 14, editedMessage: { conversation: "Corrigido" } } })[0]).toMatchObject({ tipo: "edicao", id: "M1", texto: "Corrigido" });
+    expect(lerEventoWebhook({ event: "MESSAGES_DELETE", instance: "omni-teste01", data: { remoteJid: "5547900000078@s.whatsapp.net", fromMe: true, id: "M9" } })).toEqual([
+      { tipo: "apagada", instancia: "omni-teste01", chatJid: "5547900000078@s.whatsapp.net", lid: null, id: "M9" },
+    ]);
+    expect(
+      lerEventoWebhook({ event: "messages.edited", instance: "omni-teste01", data: { key: { remoteJid: "120363000000000001@g.us", fromMe: false, id: "M3" }, type: 14, editedMessage: { extendedTextMessage: { text: "Novo" } } } }),
+    ).toEqual([expect.objectContaining({ tipo: "edicao", chatJid: "120363000000000001@g.us", id: "M3", texto: "Novo" })]);
+    expect(upsert({ pinInChatMessage: { key: { id: "M1" }, type: 1 } })[0]).toMatchObject({ tipo: "fixada", id: "M1", fixar: true });
+    expect(upsert({ pinInChatMessage: { key: { id: "M1" }, type: 2 } })[0]).toMatchObject({ tipo: "fixada", fixar: false });
   });
 });

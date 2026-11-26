@@ -19,6 +19,9 @@ export type EstadoConexao = "conectado" | "conectando" | "desconectado" | "inexi
 
 export type ConfigWebhook = { url: string; segredo: string };
 
+/** Uma mensagem no WhatsApp: a conversa, se é minha, o id e, no grupo, quem escreveu. */
+export type ChaveDaMensagem = { remoteJid: string; fromMe: boolean; id: string; participant?: string | null };
+
 export interface WhatsApp {
   /** Cria o número no provedor (sem parear), com o webhook do Omni e as configurações seguras. */
   criarNumero(instancia: string, webhook: ConfigWebhook): Promise<void>;
@@ -32,8 +35,14 @@ export interface WhatsApp {
   desconectar(instancia: string): Promise<void>;
   /** Apaga o número do provedor. */
   remover(instancia: string): Promise<void>;
-  /** Envia texto para uma pessoa (número com DDI) ou grupo (JID). */
-  enviarTexto(instancia: string, para: string, texto: string): Promise<{ id: string; jid: string }>;
+  /** Envia texto para uma pessoa (número com DDI) ou grupo (JID); com `citada`, como resposta a ela. */
+  enviarTexto(instancia: string, para: string, texto: string, opcoes?: { citada?: ChaveDaMensagem & { texto?: string | null } }): Promise<{ id: string; jid: string }>;
+  /** Reage a uma mensagem (emoji vazio tira a reação). */
+  reagir(instancia: string, chave: ChaveDaMensagem, emoji: string): Promise<void>;
+  /** Apaga para todos (só mensagem minha). */
+  apagarParaTodos(instancia: string, chave: ChaveDaMensagem): Promise<void>;
+  /** Edita o texto de uma mensagem minha. */
+  editar(instancia: string, chave: ChaveDaMensagem, texto: string): Promise<void>;
   /** Envia um arquivo (imagem, vídeo, áudio ou documento) com legenda opcional. */
   enviarArquivo(instancia: string, para: string, arquivo: { conteudo: Buffer; mimetype: string; nome: string; legenda?: string }): Promise<{ id: string; jid: string }>;
   /** Envia uma mensagem de voz (o provedor converte para OGG/Opus, como as gravadas no celular). */

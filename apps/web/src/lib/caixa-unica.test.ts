@@ -18,6 +18,7 @@ const conversa = (id: string, nome: string, telefone: string | null, ultimaEm: s
   missoes: [],
   sugestoes: [],
   concluida: false,
+  fixadaEm: null,
   naoLidas: 0,
   marcadaNaoLida: false,
   lidaAte: null,

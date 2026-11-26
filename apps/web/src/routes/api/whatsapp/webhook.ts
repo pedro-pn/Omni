@@ -33,11 +33,20 @@ export const Route = createFileRoute("/api/whatsapp/webhook")({
         try {
           for (const e of lerEventoWebhook(corpo)) {
             if (e.tipo === "mensagem") {
-              await pool.query("SELECT app.whatsapp_registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", [
+              await pool.query("SELECT app.whatsapp_registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)", [
                 e.instancia, e.chatJid, e.lid, e.grupo, e.telefone, e.id, e.deMim, e.autorJid, e.autorNome, e.conteudo, e.texto, e.arquivo, e.em,
+                e.citada?.id ?? null, e.citada?.texto ?? null, e.citada?.autorJid ?? null, e.encaminhada ?? false,
               ]);
             } else if (e.tipo === "status") {
               await pool.query("SELECT app.whatsapp_registrar_status($1, $2, $3, $4)", [e.instancia, e.chatJid, e.id, e.status]);
+            } else if (e.tipo === "reacao") {
+              await pool.query("SELECT app.whatsapp_registrar_reacao($1, $2, $3, $4, $5, $6, $7, $8, $9)", [e.instancia, e.chatJid, e.lid, e.alvoId, e.deMim, e.autorJid, e.autorNome, e.emoji, e.em]);
+            } else if (e.tipo === "apagada") {
+              await pool.query("SELECT app.whatsapp_registrar_apagada($1, $2, $3, $4)", [e.instancia, e.chatJid, e.lid, e.id]);
+            } else if (e.tipo === "edicao") {
+              await pool.query("SELECT app.whatsapp_registrar_edicao($1, $2, $3, $4, $5, $6)", [e.instancia, e.chatJid, e.lid, e.id, e.texto, e.em]);
+            } else if (e.tipo === "fixada") {
+              await pool.query("SELECT app.whatsapp_registrar_fixada($1, $2, $3, $4, $5)", [e.instancia, e.chatJid, e.lid, e.id, e.fixar]);
             } else {
               await pool.query("SELECT app.whatsapp_registrar_conexao($1, $2, $3, $4)", [e.instancia, e.estado, e.telefone, e.nomePerfil]);
             }

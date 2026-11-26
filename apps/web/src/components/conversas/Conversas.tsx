@@ -5,8 +5,13 @@ import {
   ArchiveRestore,
   ArrowLeft,
   Check,
+  Ban,
   CheckCheck,
   Clock,
+  Forward,
+  Pin,
+  PinOff,
+  Star,
   Download,
   FileText,
   Image,
@@ -87,7 +92,21 @@ import { AvisoNaoLidas, SetaParaBaixo, useRolagemDoChat } from "../comum/Rolagem
 import { VincularContato } from "../unica/Vincular.tsx";
 import { ImagemComPrevia } from "../comum/ImagemComPrevia.tsx";
 import { PreviaDoLink, primeiroLink, TextoComLinks } from "./Links.tsx";
+import { fixarConversa } from "../../lib/whatsapp-acoes-fns.ts";
 import { corDoAutor, FotoDoAutor } from "./AutorDoGrupo.tsx";
+import {
+  BarraDeFixadas,
+  BarraDeSelecao,
+  CitacaoNoBalao,
+  DialogoEditar,
+  DialogoEncaminhar,
+  MenuDaMensagem,
+  ProvedorDeAcoes,
+  ReacoesDoBalao,
+  RespondendoA,
+  useAcoes,
+  useDetalhesDaConversa,
+} from "./AcoesDaMensagem.tsx";
 
 /**
  * Conversas do WhatsApp (Fase 7). As conversas e as mensagens vêm do webhook da
@@ -550,7 +569,7 @@ export function ListaConversas({
       )
     : verArquivadas
       ? arquivadas
-      : daAba.filter((c) => !c.concluida);
+      : fixadasNoTopo(daAba.filter((c) => !c.concluida));
   // Sem conversas e sem o WhatsApp conectado: o QR code já fica na tela.
   if (!conversas.length && precisaConectar) return <ConectarWhatsApp />;
   if (!conversas.length) {
@@ -648,6 +667,12 @@ export function ListaConversas({
   );
 }
 
+/** Fixadas no topo (a fixada por último primeiro); o resto na ordem de sempre (mais recente). */
+function fixadasNoTopo(lista: ConversaResumo[]): ConversaResumo[] {
+  const fixadas = lista.filter((c) => c.fixadaEm).sort((a, b) => b.fixadaEm!.localeCompare(a.fixadaEm!));
+  return [...fixadas, ...lista.filter((c) => !c.fixadaEm)];
+}
+
 function prefetchMensagens(qc: ReturnType<typeof useQueryClient>, chatId: string) {
   void qc.prefetchQuery({ queryKey: ["whatsapp", "mensagens", chatId], queryFn: () => mensagensDaConversa({ data: { chatId } }), staleTime: 15_000 });
 }
@@ -669,7 +694,14 @@ function ItemConversa({
   const alternarLida = () => marcar.mutate({ chatId: c.id, lida: !lida });
   const concluirOuReabrir = { rotulo: c.concluida ? "Desarquivar" : "Arquivar", icone: c.concluida ? ArchiveRestore : Archive, acao: () => concluir.mutate({ conversa: c, concluir: !c.concluida }) };
   const { dx, moveu, fundo, handlers } = useDeslizarLados({ direita: c.podeResponder ? acaoLida(lida, alternarLida) : undefined, esquerda: concluirOuReabrir });
-  const menu = useMenuDeContexto([...(c.podeResponder ? [acaoLida(lida, alternarLida)] : []), concluirOuReabrir]);
+  // Fixar no topo da lista (até 3, como no WhatsApp; 0087).
+  const fixar = useMutation({
+    mutationFn: () => fixarConversa({ data: { chatId: c.id, fixar: !c.fixadaEm } }),
+    onError: (e) => alert(e instanceof Error ? e.message : "Não foi possível fixar."),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ["whatsapp", "conversas"] }),
+  });
+  const fixarOuDesafixar = { rotulo: c.fixadaEm ? "Desafixar conversa" : "Fixar conversa", icone: c.fixadaEm ? PinOff : Pin, acao: () => fixar.mutate() };
+  const menu = useMenuDeContexto([...(c.podeResponder ? [acaoLida(lida, alternarLida)] : []), fixarOuDesafixar, concluirOuReabrir]);
   return (
     <li className="group relative border-b border-linha" onContextMenu={menu.abrir}>
       {fundo}
@@ -691,7 +723,10 @@ function ItemConversa({
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
             <span className={`truncate ${lida ? "font-medium" : "font-semibold"}`}>{c.nome}</span>
-            <span className={`shrink-0 text-xs ${lida ? "text-muted" : "font-semibold text-floresta-texto"}`}>{quandoCurto(c.ultimaEm)}</span>
+            <span className={`flex shrink-0 items-center gap-1 text-xs ${lida ? "text-muted" : "font-semibold text-floresta-texto"}`}>
+              {c.fixadaEm && <Pin size={12} aria-label="Fixada" className="rotate-45 text-muted" />}
+              {quandoCurto(c.ultimaEm)}
+            </span>
           </span>
           <span className="flex items-center justify-between gap-2">
             <span className={`truncate text-sm ${lida ? "text-muted" : "text-ink"}`}>{c.previa ?? ""}</span>
@@ -845,15 +880,25 @@ function inicioDaSequencia(itens: Array<{ k: string; m?: MensagemWhatsApp }>, i:
 function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo: boolean; chatId?: string; /** Primeira de uma sequência da mesma pessoa (grupo: nome e foto). */ inicio?: boolean }) {
   if (m.chamada) return <LinhaDeChamada m={m} />;
   const comAutor = grupo && !m.deMim;
+  const acoes = useAcoes();
+  const selecionando = Boolean(acoes?.selecionadas);
+  const marcada = Boolean(m.waId && acoes?.selecionadas?.has(m.waId));
+  const favorita = Boolean(m.waId && acoes?.detalhes?.favoritas.includes(m.waId));
   const Icone = ICONE_TIPO[m.tipo];
   const temMidia =
     ["imagem", "figurinha", "audio", "video", "documento"].includes(m.tipo) &&
     !m.ensaio;
   return (
-    <div className={`flex gap-2 ${m.deMim ? "justify-end" : "justify-start"} ${comAutor && !inicio ? "pl-10" : ""} ${m.pendente ? "motion-safe:animate-[omni-entrar_160ms_ease-out]" : ""}`}>
+    <div
+      className={`flex gap-2 ${m.deMim ? "justify-end" : "justify-start"} ${comAutor && !inicio ? "pl-10" : ""} ${m.pendente ? "motion-safe:animate-[omni-entrar_160ms_ease-out]" : ""} ${selecionando && m.waId ? "cursor-pointer" : ""} ${marcada ? "rounded-md bg-azul/10" : ""}`}
+      onClick={selecionando && m.waId ? () => acoes?.alternarSelecao(m) : undefined}
+    >
+      {selecionando && m.waId && <input type="checkbox" readOnly checked={marcada} aria-label="Selecionar mensagem" className={`mt-2 ${m.deMim ? "order-first mr-auto" : ""}`} />}
       {comAutor && inicio && chatId && <FotoDoAutor chatId={chatId} autorId={m.autorId} nome={m.autor} />}
+      <div className={`flex max-w-[80%] flex-col ${m.deMim ? "items-end" : "items-start"}`}>
+      <MenuDaMensagem m={m}>
       <div
-        className={`max-w-[80%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+        className={`max-w-full rounded-lg px-3 py-2 text-sm shadow-sm ${
           m.ensaio
             ? "border border-dashed border-floresta bg-superficie"
             : m.deMim
@@ -871,8 +916,19 @@ function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo
             Ensaio: registrada no Omni, não enviada
           </p>
         )}
-        {temMidia && <Midia m={m} />}
-        {m.tipo !== "texto" && !temMidia && (
+        {m.encaminhada && !m.apagada && (
+          <p className={`mb-0.5 flex items-center gap-1 text-xs italic ${m.deMim ? "text-white/75" : "text-muted"}`}>
+            <Forward size={12} aria-hidden /> Encaminhada
+          </p>
+        )}
+        {!m.apagada && <CitacaoNoBalao m={m} />}
+        {m.apagada && (
+          <p className={`flex items-center gap-1.5 italic ${m.deMim ? "text-white/80" : "text-muted"}`}>
+            <Ban size={14} aria-hidden /> {m.deMim ? "Você apagou esta mensagem" : "Mensagem apagada"}
+          </p>
+        )}
+        {!m.apagada && temMidia && <Midia m={m} />}
+        {!m.apagada && m.tipo !== "texto" && !temMidia && (
           <p
             className={`flex items-center gap-1 text-xs ${m.deMim ? "text-white/80" : "text-muted"}`}
           >
@@ -880,11 +936,13 @@ function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo
             {m.arquivo ? `: ${m.arquivo}` : ""}
           </p>
         )}
-        {m.tipo === "texto" && primeiroLink(m.texto) && <PreviaDoLink url={primeiroLink(m.texto)!} deMim={m.deMim && !m.ensaio} />}
-        {m.texto && <TextoComLinks texto={m.texto} deMim={m.deMim && !m.ensaio} />}
+        {!m.apagada && m.tipo === "texto" && primeiroLink(m.texto) && <PreviaDoLink url={primeiroLink(m.texto)!} deMim={m.deMim && !m.ensaio} />}
+        {!m.apagada && m.texto && <TextoComLinks texto={m.texto} deMim={m.deMim && !m.ensaio} />}
         <p
           className={`mt-0.5 flex items-center justify-end gap-1 text-[11px] ${m.deMim && !m.ensaio ? "text-white/70" : "text-muted"}`}
         >
+          {favorita && <Star size={11} aria-label="Favorita" className="fill-current" />}
+          {m.editada && !m.apagada && <span className="italic">Editada</span>}
           {new Date(m.em).toLocaleTimeString("pt-BR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -906,6 +964,9 @@ function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo
             <Check size={14} aria-label="Enviada" className="opacity-60" />
           )}
         </p>
+      </div>
+      </MenuDaMensagem>
+      <ReacoesDoBalao m={m} />
       </div>
     </div>
   );
@@ -945,9 +1006,52 @@ export function PainelConversa({
   // Histórico baixado neste aparelho (só o dono do número): junta com o servidor sem repetir.
   const aparelho = useMensagensDoAparelho(conversa.id, conversa.numero.id, conversa.podeResponder);
   const doServidor = new Set((q.data ?? []).map((m) => m.waId).filter(Boolean));
+  // Reações, favoritas, fixadas e as apagadas só para mim (0087).
+  const detalhes = useDetalhesDaConversa(conversa.id);
+  const ocultas = new Set(detalhes.data?.ocultas ?? []);
   const mensagens = q.data
-    ? [...q.data, ...aparelho.mensagens.filter((m) => !doServidor.has(m.waId))].sort((a, b) => a.em.localeCompare(b.em))
+    ? [...q.data, ...aparelho.mensagens.filter((m) => !doServidor.has(m.waId))].filter((m) => !m.waId || !ocultas.has(m.waId)).sort((a, b) => a.em.localeCompare(b.em))
     : undefined;
+  // Ações nas mensagens (como no WhatsApp Web).
+  const [respondendo, setRespondendo] = useState<MensagemWhatsApp | null>(null);
+  const [editando, setEditando] = useState<MensagemWhatsApp | null>(null);
+  const [encaminhando, setEncaminhando] = useState<MensagemWhatsApp[] | null>(null);
+  const [selecionadas, setSelecionadas] = useState<Set<string> | null>(null);
+  const [avisoAcao, setAvisoAcao] = useState<string | null>(null);
+  useEffect(() => {
+    setRespondendo(null);
+    setSelecionadas(null);
+  }, [conversa.id]);
+  useEffect(() => {
+    if (!avisoAcao) return;
+    const t = setTimeout(() => setAvisoAcao(null), 4000);
+    return () => clearTimeout(t);
+  }, [avisoAcao]);
+  const todasAsConversas = useConversas(Boolean(encaminhando));
+  const acoes = {
+    conversa,
+    detalhes: detalhes.data,
+    mensagens: mensagens ?? [],
+    responder: (m: MensagemWhatsApp) => setRespondendo(m),
+    editar: (m: MensagemWhatsApp) => setEditando(m),
+    encaminhar: (ms: MensagemWhatsApp[]) => setEncaminhando(ms),
+    selecionadas,
+    alternarSelecao: (m: MensagemWhatsApp) => {
+      if (!m.waId) return;
+      const nova = new Set(selecionadas ?? []);
+      if (nova.has(m.waId)) nova.delete(m.waId);
+      else nova.add(m.waId);
+      setSelecionadas(nova);
+    },
+    irPara: (waId: string) => {
+      const alvo = mensagens?.find((m) => m.waId === waId);
+      const el = alvo ? document.querySelector<HTMLElement>(`[data-msg="${CSS.escape(alvo.id)}"]`) : null;
+      if (!el) return setAvisoAcao("Essa mensagem não está carregada.");
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.animate([{ backgroundColor: "rgba(56,139,253,0.25)" }, { backgroundColor: "transparent" }], { duration: 1600 });
+    },
+    aviso: setAvisoAcao,
+  };
   const enderecos = contato?.enderecos ?? [];
   const emails = useQuery({
     queryKey: ["unica", "emails", enderecos.join(",")],
@@ -993,7 +1097,17 @@ export function PainelConversa({
   );
   let dia = "";
   return (
+    <ProvedorDeAcoes value={acoes}>
     <div className="flex min-h-0 flex-1 flex-col">
+      {avisoAcao && (
+        <p role="status" className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-md bg-ink px-3 py-2 text-sm text-fundo shadow-lg">
+          {avisoAcao}
+        </p>
+      )}
+      {encaminhando && todasAsConversas.data && (
+        <DialogoEncaminhar mensagens={encaminhando} conversas={todasAsConversas.data} deChatId={conversa.id} fechar={() => (setEncaminhando(null), setSelecionadas(null))} />
+      )}
+      {editando && <DialogoEditar m={editando} chatId={conversa.id} fechar={() => setEditando(null)} />}
       <header className="flex items-center gap-3 border-b border-linha bg-superficie px-5 py-3">
         <button
           type="button"
@@ -1075,6 +1189,8 @@ export function PainelConversa({
         )}
       </header>
       {!naMissao && <MissoesDaConversa conversa={conversa} />}
+      {aba === "mensagens" && selecionadas && <BarraDeSelecao fechar={() => setSelecionadas(null)} />}
+      {aba === "mensagens" && !selecionadas && <BarraDeFixadas />}
       {temLigacoes && (
         <div role="tablist" aria-label="Conversa" className="flex gap-1 border-b border-linha bg-superficie px-5">
           {(["mensagens", "ligacoes"] as const).map((a) => (
@@ -1141,7 +1257,7 @@ export function PainelConversa({
       <SetaParaBaixo visivel={!rolagem.noFim || rolagem.naoLidasAbaixo > 0} naoLidas={rolagem.naoLidasAbaixo} onClick={rolagem.descer} />
       </div>
       {conversa.podeResponder ? (
-        <Resposta conversa={conversa} />
+        <Resposta conversa={conversa} respondendo={respondendo} onResposta={() => setRespondendo(null)} />
       ) : (
         <footer className="border-t border-linha bg-superficie px-5 py-3 text-sm text-muted">
           Você acompanha esta conversa pela missão. Responde quem acompanha o
@@ -1154,6 +1270,7 @@ export function PainelConversa({
         <VincularContato nome={conversa.nome} telefone={conversa.telefone} contatoId={contato?.id ?? null} fechar={() => setVincular(false)} />
       )}
     </div>
+    </ProvedorDeAcoes>
   );
 }
 
@@ -1307,12 +1424,16 @@ function MissoesDaConversa({ conversa }: { conversa: ConversaResumo }) {
   );
 }
 
-function Resposta({ conversa }: { conversa: ConversaResumo }) {
+function Resposta({ conversa, respondendo = null, onResposta }: { conversa: ConversaResumo; respondendo?: MensagemWhatsApp | null; onResposta?: () => void }) {
   const qc = useQueryClient();
   const [texto, setTexto] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const seletor = useRef<HTMLInputElement>(null);
   const caixaTexto = useRef<HTMLTextAreaElement>(null);
+  // Responder: o cursor vai para a caixa de digitar.
+  useEffect(() => {
+    if (respondendo) caixaTexto.current?.focus();
+  }, [respondendo]);
   const gravador = useGravador();
   // Emoji no ponto do cursor (ou no fim), e o cursor depois dele.
   const inserirEmoji = (emoji: string) => {
@@ -1354,8 +1475,9 @@ function Resposta({ conversa }: { conversa: ConversaResumo }) {
   // fica livre; a confirmação do servidor troca pela de verdade. Se der erro, o texto volta.
   const chaveMensagens = ["whatsapp", "mensagens", conversa.id];
   const enviar = useMutation({
-    onMutate: async (v: { texto: string; arquivo: File | null }) => {
+    onMutate: async (v: { texto: string; arquivo: File | null; citada?: MensagemWhatsApp | null }) => {
       setTexto("");
+      onResposta?.();
       setArquivo(null);
       if (seletor.current) seletor.current.value = "";
       await qc.cancelQueries({ queryKey: chaveMensagens });
@@ -1369,6 +1491,7 @@ function Resposta({ conversa }: { conversa: ConversaResumo }) {
         em: new Date().toISOString(),
         status: null,
         pendente: true,
+        citada: v.citada?.waId ? { waId: v.citada.waId, texto: v.citada.texto, autorId: v.citada.deMim ? null : (v.citada.autorId ?? null) } : null,
       };
       qc.setQueryData<MensagemWhatsApp[]>(chaveMensagens, (atual) => [...(atual ?? []), pendente]);
       return { pendente };
@@ -1378,9 +1501,15 @@ function Resposta({ conversa }: { conversa: ConversaResumo }) {
       setTexto(v.texto);
       setArquivo(v.arquivo);
     },
-    mutationFn: async ({ texto, arquivo }: { texto: string; arquivo: File | null }) => {
+    mutationFn: async ({ texto, arquivo, citada }: { texto: string; arquivo: File | null; citada?: MensagemWhatsApp | null }) => {
       if (!arquivo)
-        return enviarMensagemWhatsApp({ data: { chatId: conversa.id, texto } });
+        return enviarMensagemWhatsApp({
+          data: {
+            chatId: conversa.id,
+            texto,
+            ...(citada?.waId ? { citada: { waId: citada.waId, deMim: citada.deMim, autorId: citada.autorId ?? null, texto: citada.texto } } : {}),
+          },
+        });
       if (arquivo.size > 16 * 1024 * 1024)
         throw new Error("Arquivo grande demais (até 16 MB).");
       const form = new FormData();
@@ -1403,7 +1532,7 @@ function Resposta({ conversa }: { conversa: ConversaResumo }) {
   });
   const submeter = (e: FormEvent) => {
     e.preventDefault();
-    if (texto.trim() || arquivo) enviar.mutate({ texto, arquivo });
+    if (texto.trim() || arquivo) enviar.mutate({ texto, arquivo, citada: respondendo });
   };
   if (modo.data?.modo === "desligado") {
     return (
@@ -1417,6 +1546,7 @@ function Resposta({ conversa }: { conversa: ConversaResumo }) {
       onSubmit={submeter}
       className="border-t border-linha bg-superficie px-5 py-3"
     >
+      {respondendo && <RespondendoA m={respondendo} onFechar={() => onResposta?.()} />}
       {modo.data?.modo === "ensaio" && (
         <p className="mb-1 text-xs text-muted">
           Modo de ensaio: a mensagem fica registrada no Omni e não sai pelo
