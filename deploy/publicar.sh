@@ -8,6 +8,7 @@
 #   deploy/publicar.sh producao --sem-backup   # pula a cópia local do banco (só em emergência)
 #   deploy/publicar.sh producao --encerrar-manutencao   # publica durante a manutenção manual e a encerra
 #   deploy/publicar.sh producao --recriar-whatsapp      # reconstrói também a Evolution e o serviço de voz
+#   deploy/publicar.sh producao --forcar                # publica de novo mesmo já estando na versão pedida
 #   OMNI_DIR=~/apps/Omni sh /tmp/publicar.sh producao   # rodando de uma cópia do script
 #
 # Passos: confere a árvore limpa → backup do banco → guarda as imagens atuais → leva o código ao
@@ -26,11 +27,13 @@ ALVO="origin/master"
 BACKUP=sim
 ENCERRAR_MANUTENCAO=nao
 RECRIAR_WHATSAPP=nao
+FORCAR=nao
 for arg in "$@"; do
   case "$arg" in
     --sem-backup) BACKUP=nao ;;
     --encerrar-manutencao) ENCERRAR_MANUTENCAO=sim ;;
     --recriar-whatsapp) RECRIAR_WHATSAPP=sim ;;
+    --forcar) FORCAR=sim ;;
     *) ALVO="$arg" ;;
   esac
 done
@@ -85,6 +88,18 @@ git fetch --quiet origin
 NOVO="$(git rev-parse "${ALVO}^{commit}")"
 CURTO_ANT="$(echo "$ANTERIOR" | cut -c1-7)"
 CURTO_NOVO="$(echo "$NOVO" | cut -c1-7)"
+
+# Já publicado: a pasta está no commit pedido e o web no ar responde com essa versão e saúde ok.
+# Nada a fazer (sem backup, sem build, sem reiniciar). --forcar ou --recriar-whatsapp publicam assim mesmo.
+if [ "$NOVO" = "$ANTERIOR" ] && [ "$FORCAR" = nao ] && [ "$RECRIAR_WHATSAPP" = nao ]; then
+  case "$(wget -qO- "$SAUDE" 2>/dev/null || true)" in
+    *'"status":"ok"'*"\"versao\":\"${NOVO}\""*)
+      echo "${AMBIENTE} já está em ${CURTO_NOVO} (o mesmo de ${ALVO}) e no ar com saúde ok: nada a publicar."
+      echo "para publicar de novo assim mesmo: deploy/publicar.sh ${AMBIENTE} --forcar"
+      exit 0 ;;
+  esac
+fi
+
 registrar "início ${CURTO_ANT} → ${CURTO_NOVO}"
 
 # 2. Backup antes de qualquer migration.

@@ -119,6 +119,19 @@ describe.skipIf(!available)("ações nas mensagens do WhatsApp", () => {
     expect((await owner.query("SELECT count(*)::int AS n FROM whatsapp_messages WHERE chat_id = $1 AND wa_id = 'M-OUTRO'", [chat])).rows[0].n).toBe(1);
   });
 
+  it("abrir uma conversa que já existe não a sobe na lista; a nova entra agora; só o dono abre (0091)", async () => {
+    const numero = (await owner.query("SELECT number_id FROM whatsapp_chats WHERE id = $1", [chat])).rows[0].number_id;
+    const abrir = (personId: string, jid: string) =>
+      withPerson(app, personId, async (db) => (await db.execute<{ id: string }>(sql`SELECT app.whatsapp_abrir_conversa(${numero}::uuid, ${jid}, ${jid.split("@")[0]!}, NULL) AS id`)).rows[0]!.id);
+    const existente = (await owner.query("INSERT INTO whatsapp_chats (number_id, jid, is_group, phone, last_message_at) VALUES ($1, '5547900000031@s.whatsapp.net', false, '5547900000031', now() - interval '3 days') RETURNING id, last_message_at", [numero])).rows[0];
+    expect(await abrir(dono, "5547900000031@s.whatsapp.net")).toBe(existente.id);
+    expect((await owner.query("SELECT last_message_at FROM whatsapp_chats WHERE id = $1", [existente.id])).rows[0].last_message_at).toEqual(existente.last_message_at);
+    const nova = await abrir(dono, "5547900000032@s.whatsapp.net");
+    const { rows } = await owner.query("SELECT last_message_at > now() - interval '1 minute' AS agora FROM whatsapp_chats WHERE id = $1", [nova]);
+    expect(rows[0].agora).toBe(true);
+    await falha(abrir(outro, "5547900000033@s.whatsapp.net"), /dono do número/);
+  });
+
   it("RLS: quem vê a conversa vê reações e fixadas; só o dono fixa; favoritas, apagadas para mim e conversas fixadas são de cada um", async () => {
     await app.query("SELECT app.whatsapp_registrar_reacao($1, $2, NULL, 'M3', false, '5547900000012@s.whatsapp.net', 'Caio', '👍', now())", [instancia, GRUPO]);
     const ver = (quem: string, tabela: string) => withPerson(app, quem, (db) => db.execute(sql.raw(`SELECT count(*)::int AS n FROM ${tabela} WHERE chat_id = '${chat}'`))).then((r) => r.rows[0]!.n);
