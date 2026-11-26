@@ -106,3 +106,7 @@ Ligar (produção):
 1. Gere um token: `openssl rand -hex 32`.
 2. No `deploy/.env.production`: `WHATSAPP_ACOES_URL=http://evolution:8099` e `WHATSAPP_ACOES_TOKEN=<o token>`.
 3. Reconstrua a Evolution, o web e o worker: `docker compose … --profile whatsapp up -d --build evolution web worker`.
+
+## Segurança: CVE-2026-48063 no Baileys
+
+A Evolution 2.3.7 (e a 2.3.8) usa o Baileys 7.0.0-rc.9, afetado pelo CVE-2026-48063 (GHSA-qvv5-jq5g-4cgg, nota 9,3): qualquer pessoa podia mandar mensagens de protocolo que só o próprio celular deveria mandar, forjar mensagens e histórico e corromper a sincronização do "app state" com chaves falsas. A correção oficial saiu no 7.0.0-rc12, que traz seis meses de mudanças e dependências novas. Por isso a imagem do Omni aplica no rc.9 só a trava da correção (`deploy/evolution/patch-cve-2026-48063.mjs`, do commit 3beb08ee do Baileys), com teste no build (`cve-2026-48063.test.mjs`). Quando a Evolution passar para um Baileys corrigido, o patch recusa o build (o hash do arquivo muda) e deve sair.

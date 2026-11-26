@@ -9,6 +9,12 @@ RUN node /tmp/omni-presence/patch-presence.mjs \
     && node /tmp/omni-presence/presence.test.mjs \
     && rm -r /tmp/omni-presence
 # Nome da agenda do celular nos contatos que já existiam (o Omni mostrava só o número).
+# CVE-2026-48063 (Baileys < 7.0.0-rc12): a trava da correção aplicada no rc.9.
+COPY patch-cve-2026-48063.mjs cve-2026-48063.test.mjs /tmp/omni-cve/
+RUN node /tmp/omni-cve/patch-cve-2026-48063.mjs \
+    && node --check /evolution/node_modules/baileys/lib/Utils/process-message.js \
+    && node /tmp/omni-cve/cve-2026-48063.test.mjs \
+    && rm -r /tmp/omni-cve
 COPY patch-contatos.mjs contatos.test.mjs /tmp/omni-contatos/
 RUN node /tmp/omni-contatos/patch-contatos.mjs \
     && node --check /evolution/dist/main.mjs \
@@ -32,6 +38,7 @@ LABEL com.filtrovali.patch-contatos="evolution-contact-names-1"
 LABEL com.filtrovali.patch-lid="evolution-lid-mapping-1"
 LABEL com.filtrovali.ponte="chamadas-omni-producao-1"
 LABEL com.filtrovali.ponte-acoes="acoes-omni-3"
+LABEL com.filtrovali.patch-cve="baileys-cve-2026-48063-1"
 LABEL com.filtrovali.app="omni"
 # Travas do Omni: chave geral forte e senha do banco; com a ponte ligada, token forte.
 ENTRYPOINT ["/bin/bash", "-c", "if [ ${#AUTHENTICATION_API_KEY} -lt 32 ]; then echo 'AUTHENTICATION_API_KEY ausente ou curta (mínimo 32)'; exit 1; fi; case \"$DATABASE_CONNECTION_URI\" in *evolution:@*) echo 'senha do banco da Evolution ausente'; exit 1;; esac; if [ -n \"$OMNI_CHAMADA_PONTE\" ] && [ ${#OMNI_CHAMADA_TOKEN} -lt 32 ]; then echo 'OMNI_CHAMADA_TOKEN ausente ou curto (mínimo 32)'; exit 1; fi; if [ -n \"$OMNI_ACOES_TOKEN\" ] && [ ${#OMNI_ACOES_TOKEN} -lt 32 ]; then echo 'OMNI_ACOES_TOKEN curto (mínimo 32)'; exit 1; fi; . ./Docker/scripts/deploy_database.sh && npm run start:prod"]
