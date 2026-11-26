@@ -262,6 +262,8 @@ deploy/publicar.sh staging            # ou: deploy/publicar.sh producao
 # rodam no ambiente e se mudaram (código deles entre as versões, ou imagem do compose diferente da
 # que está rodando). Build junto com o do web; troca depois da conferência (o número cai alguns
 # segundos e reconecta sozinho). Forçar: deploy/publicar.sh producao --recriar-whatsapp
+# Já atualizado (a pasta no commit de origin/master e o web no ar com essa versão e saúde ok): o
+# script avisa e sai sem fazer nada. Publicar de novo assim mesmo: deploy/publicar.sh producao --forcar
 
 # Logs, reiniciar, parar
 omni-stg logs -f --tail 100 web worker

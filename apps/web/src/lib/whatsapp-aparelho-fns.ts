@@ -193,8 +193,8 @@ export const abrirConversaNova = createServerFn({ method: "POST" })
     const [c] = await withPerson(getPool(), personId, async (db) =>
       (
         await db.execute<{ id: string }>(
-          // Sem mensagens ainda: entra no topo da lista agora (a primeira mensagem confirma).
-          sql`SELECT app.whatsapp_conversa_do_dono(${data.numberId}::uuid, ${jid}, NULL, false, ${jid.split("@")[0]!}, ${data.nome ?? null}, now(), NULL) AS id`,
+          // Conversa que já existe não sobe na lista (abrir não é interação); a nova entra agora (0091).
+          sql`SELECT app.whatsapp_abrir_conversa(${data.numberId}::uuid, ${jid}, ${jid.split("@")[0]!}, ${data.nome ?? null}) AS id`,
         )
       ).rows,
     );
