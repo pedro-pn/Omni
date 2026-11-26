@@ -16,6 +16,7 @@ Internet ──443──► infra-proxy-caddy (filtroAPP-main/deploy/infra-proxy
 ```
 
 - **Um compose para os dois ambientes:** `deploy/docker-compose.prod.yml`. Cada ambiente é um *projeto* do compose (`-p omni-staging` e `-p omni`), com volumes, rede e banco próprios, e um arquivo de variáveis próprio (`deploy/.env.staging`, `deploy/.env.production`).
+- **Uma pasta por ambiente (E07):** produção em `~/apps/Omni` (só `deploy/.env.production`), staging em `~/apps/Omni-staging` (só `deploy/.env.staging`). Publicar troca o commit da pasta, e na mesma pasta um ambiente atropelaria o outro; o `publicar.sh` recusa a pasta que tiver os dois arquivos.
 - **Nada do Omni fica exposto na internet** além do que o Caddy encaminha: o web publica só em `172.17.0.1:<porta>`; o banco e a Evolution não publicam porta.
 - **Portas na VPS:** 8081 filtroboard, 8082 Evolution do Prisma, 8083 ComercialAPP, **8084 Omni produção**, **8085 Omni staging**, **8086 áudio das chamadas (produção)**, **8087 áudio das chamadas (staging)**.
 
@@ -29,8 +30,17 @@ Internet ──443──► infra-proxy-caddy (filtroAPP-main/deploy/infra-proxy
 | Projeto do compose / arquivo | `omni-staging` / `deploy/.env.staging` | `omni` / `deploy/.env.production` |
 | filtroAPP | lê produção; escrita `simulada` | `real` (depois de conferir os escopos) |
 | Prisma | `sandbox` | `production` (depois da homologação) |
-| E-mail / WhatsApp | ensaio | `real` (depois do comunicado ao time) |
-| Segredos, VAPID, Evolution | **próprios do staging** | **próprios da produção** (nunca reaproveitar) |
+| E-mail | ensaio | `real` (depois do comunicado ao time) |
+| WhatsApp e chamadas | desligados (um número só fica num sistema; para testar, só número de teste, §6) | ligados |
+| IA | desligada (decisão de 26/11/2026; ligar só o necessário para um teste) | ligada, com teto diário |
+| CSP | `aplicar` (a violação aparece aqui antes) | `relatorio` até alguns dias sem violações |
+| Segredos, VAPID, token do filtroAPP | **próprios do staging** | **próprios da produção** (nunca reaproveitar) |
+
+**Dados (decisão de 26/11/2026, E07):** o staging lê a produção do filtroAPP com um token só dele, como a
+produção do Omni, e nada grava (escrita `simulada`). Por isso ele tem **dados reais** (missões, nomes,
+clientes) e é protegido como a produção: login Microsoft, segredos próprios, `noindex` no Caddy e nenhum
+dado copiado para fora. Não há cópia do banco da produção do Omni (mensagens, e-mails, WhatsApp): o banco
+do staging começa vazio e se enche pela sincronização.
 
 ## 2. O que o staging destrava
 
@@ -75,8 +85,8 @@ export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock    # ponha no ~/.profil
 ### 3.3 Código e segredos
 
 ```bash
-# Como omni, na VPS. O repositório é privado: use uma chave de implantação só de leitura no GitHub.
-git clone git@github.com:pedro-pn/Omni.git ~/omni && cd ~/omni
+# Como omni, na VPS. Pasta própria do staging (o repositório é público: o clone não pede chave).
+git clone https://github.com/pedro-pn/Omni.git ~/apps/Omni-staging && cd ~/apps/Omni-staging
 
 # Variáveis do staging a partir do modelo (preencha cada linha; nada disso vai para o Git)
 cp deploy/staging.env.example deploy/.env.staging && chmod 600 deploy/.env.staging
@@ -94,10 +104,10 @@ Preencha à mão no `deploy/.env.staging`:
 | Variável | De onde vem |
 |---|---|
 | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` | App "Omni" do Entra (os mesmos do desenvolvimento, com a URI nova) |
-| `FILTROAPP_API_TOKEN` | filtroAPP → Integrações: um token **"Omni – staging"** com os escopos de `docs/integracoes/filtroapp-token.md`. Se o token for restrito por IP, libere o IP da VPS |
-| `PRISMA_OMNI_READER_TOKEN` | Credencial `reader` do **sandbox** do Prisma |
-| `GRAPH_*` | App "Omni – Integrações" (IDs e a impressão digital SHA-256 do certificado, como no `.env` de desenvolvimento) |
-| `OPENAI_API_KEY` | Organização da OpenAI com retenção zero (ADR 0005) |
+| `FILTROAPP_API_TOKEN` | filtroAPP → Integrações: um token **"Omni – staging"** (nunca o da produção) com os escopos **de leitura** de `docs/integracoes/filtroapp-token.md`. Se o token for restrito por IP, libere o IP da VPS |
+| `PRISMA_OMNI_READER_TOKEN` | Credencial `reader` do **sandbox** do Prisma (opcional) |
+| `GRAPH_*` | App "Omni – Integrações" (IDs e a impressão digital SHA-256 do certificado). Opcional: sem as quatro, e-mails, SharePoint e Teams ficam desligados no staging |
+| `OPENAI_API_KEY` | Vazia (IA desligada). Só para um teste da IA, e com o teto diário |
 
 **Certificados (Graph e, se usar certificado no login, Entra):** copie as chaves privadas para `deploy/secrets/` (fora do Git; `secrets/` está no `.gitignore`). A pasta aparece dentro dos contêineres como `/run/secrets/omni`, e o web e o worker rodam como o usuário 1000 do contêiner. Por isso:
 
@@ -106,7 +116,7 @@ Preencha à mão no `deploy/.env.staging`:
 
 ```bash
 mkdir -p deploy/secrets
-scp ~/.secrets/omni-graph.key vps:~/omni/deploy/secrets/      # da sua máquina
+scp ~/.secrets/omni-graph.key vps:~/apps/Omni-staging/deploy/secrets/      # da sua máquina
 
 # Docker rootless (padrão desta VPS): o usuário 1000 do contêiner vira um subuid do host, sem
 # relação com o usuário omni. A pasta precisa de 711 (atravessar, sem listar) e as chaves de 644.
@@ -126,10 +136,42 @@ docker compose -p omni -f deploy/docker-compose.prod.yml --env-file deploy/.env.
   sh -c 'for f in /run/secrets/omni/*.key; do test -r "$f" && echo "$f legivel" || echo "$f NAO legivel"; done'
 ```
 
+### 3.4 Migrar o staging antigo (de `~/apps/Omni` para `~/apps/Omni-staging`)
+
+O primeiro staging (05/11/2026) ficou na pasta da produção. Para separar (o banco, volume
+`omni-staging_omni_pg`, continua o mesmo: o projeto do compose não muda):
+
+```bash
+# Como omni, na VPS
+cd ~/apps/Omni
+docker compose -p omni-staging -f deploy/docker-compose.prod.yml --env-file deploy/.env.staging stop 2>/dev/null || true
+git clone https://github.com/pedro-pn/Omni.git ~/apps/Omni-staging
+mv deploy/.env.staging ~/apps/Omni-staging/deploy/.env.staging
+mkdir -p ~/apps/Omni-staging/deploy/secrets && cp deploy/secrets/*.key ~/apps/Omni-staging/deploy/secrets/ 2>/dev/null || true
+chmod 711 ~/apps/Omni-staging/deploy/secrets && chmod 644 ~/apps/Omni-staging/deploy/secrets/*.key 2>/dev/null || true
+```
+
+No `~/apps/Omni-staging/deploy/.env.staging`, alinhe com o `deploy/staging.env.example` atual:
+
+- `FILTROAPP_API_TOKEN`: o token novo "Omni – staging" (o antigo foi revogado: responde 401);
+- IA: `OPENAI_API_KEY=` vazio e todas as `IA_*=desligada`;
+- WhatsApp: as quatro `WHATSAPP_*` e `EVOLUTION_POSTGRES_PASSWORD` vazias, `CHAMADAS_HABILITADAS=off`;
+- `CSP_MODO=aplicar`, `OPERACAO_STATUS=desligado`.
+
+Depois suba o banco (o publicar.sh faz backup dele antes de tudo) e publique pela pasta nova:
+
+```bash
+cd ~/apps/Omni-staging
+docker compose -p omni-staging -f deploy/docker-compose.prod.yml --env-file deploy/.env.staging up -d --wait postgres
+deploy/publicar.sh staging
+```
+
+E confira (§5).
+
 ## 4. Subir o staging
 
 ```bash
-cd ~/omni
+cd ~/apps/Omni-staging
 alias omni-stg='docker compose -p omni-staging -f deploy/docker-compose.prod.yml --env-file deploy/.env.staging'
 
 omni-stg config -q                         # valida o compose e as variáveis obrigatórias
@@ -191,6 +233,8 @@ omni-stg --profile whatsapp ps
 docker ps --format '{{.Names}}\t{{.Ports}}' | grep evolution   # nenhuma porta publicada
 ```
 
+Só com um **número de teste** (um número fica num sistema só: pareá-lo aqui o tira da produção) e com as
+quatro `WHATSAPP_*` e `EVOLUTION_POSTGRES_PASSWORD` preenchidas no `.env.staging` (vazias por padrão).
 Depois: entre com a conta dona do número de teste, abra **Conversas** e leia o QR code (nunca um número que esteja no Prisma). Detalhes: `docs/integracoes/whatsapp-evolution.md`.
 
 **Chamadas no staging** (perfil `chamadas`, junto do `whatsapp`; variáveis no fim de `deploy/staging.env.example`, com `CHAMADA_MODO=teste` e a lista dos números da equipe):
