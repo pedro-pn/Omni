@@ -108,6 +108,17 @@ describe.skipIf(!available)("ações nas mensagens do WhatsApp", () => {
     expect(m5[0].mentions).toEqual([]);
   });
 
+  it("mensagem que o Omni não mostra (outro) não muda a ordem nem a prévia da conversa (0090)", async () => {
+    const antes = (await owner.query("SELECT last_message_at, last_preview FROM whatsapp_chats WHERE id = $1", [chat])).rows[0];
+    await app.query(
+      "SELECT app.whatsapp_registrar_mensagem($1, $2, NULL, true, NULL, 'M-OUTRO', false, '5547900000012@s.whatsapp.net', 'Caio', 'outro', NULL, NULL, now() + interval '1 hour')",
+      [instancia, GRUPO],
+    );
+    const depois = (await owner.query("SELECT last_message_at, last_preview FROM whatsapp_chats WHERE id = $1", [chat])).rows[0];
+    expect(depois).toEqual(antes);
+    expect((await owner.query("SELECT count(*)::int AS n FROM whatsapp_messages WHERE chat_id = $1 AND wa_id = 'M-OUTRO'", [chat])).rows[0].n).toBe(1);
+  });
+
   it("RLS: quem vê a conversa vê reações e fixadas; só o dono fixa; favoritas, apagadas para mim e conversas fixadas são de cada um", async () => {
     await app.query("SELECT app.whatsapp_registrar_reacao($1, $2, NULL, 'M3', false, '5547900000012@s.whatsapp.net', 'Caio', '👍', now())", [instancia, GRUPO]);
     const ver = (quem: string, tabela: string) => withPerson(app, quem, (db) => db.execute(sql.raw(`SELECT count(*)::int AS n FROM ${tabela} WHERE chat_id = '${chat}'`))).then((r) => r.rows[0]!.n);

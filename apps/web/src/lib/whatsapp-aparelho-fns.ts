@@ -110,11 +110,14 @@ export const paginaDoHistorico = createServerFn({ method: "POST" })
     await withPerson(getPool(), personId, async (db) => {
       for (const [jid, lista] of porConversa) {
         const ultima = lista.reduce((a, b) => (b.em > a.em ? b : a));
+        // A data e a prévia vêm da última que se vê ("outro" não sobe a conversa, como no webhook).
+        const visiveis = lista.filter((m) => m.conteudo !== "outro");
+        const ultimaVisivel = visiveis.length ? visiveis.reduce((a, b) => (b.em > a.em ? b : a)) : null;
         const nome = ultima.grupo ? null : (lista.find((m) => !m.deMim && m.autorNome)?.autorNome ?? null);
         const lid = lista.find((m) => m.lid)?.lid ?? null;
         const [c] = (
           await db.execute<{ id: string }>(
-            sql`SELECT app.whatsapp_conversa_do_dono(${data.numberId}::uuid, ${jid}, ${lid}, ${ultima.grupo}, ${ultima.telefone}, ${nome}, ${ultima.em.toISOString()}::timestamptz, ${previa(ultima)}) AS id`,
+            sql`SELECT app.whatsapp_conversa_do_dono(${data.numberId}::uuid, ${jid}, ${lid}, ${ultima.grupo}, ${ultima.telefone}, ${nome}, ${ultimaVisivel?.em.toISOString() ?? null}::timestamptz, ${ultimaVisivel ? previa(ultimaVisivel) : null}) AS id`,
           )
         ).rows;
         ids.set(jid, c!.id);
