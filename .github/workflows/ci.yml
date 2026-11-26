@@ -26,7 +26,7 @@ jobs:
       OMNI_APP_PASSWORD: omni_app_dev
       OMNI_WORKER_PASSWORD: omni_worker_dev
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
