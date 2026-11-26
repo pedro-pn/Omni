@@ -33,6 +33,7 @@ SQL() { $C exec -T postgres psql -U postgres -d omni -c "$1"; }
 - **Backup:** o worker confere de hora em hora o status do backup (`OPERACAO_STATUS=ligado`) e avisa
   se o último envio ao B2 passar de 26 h, se uma execução falhar ou se o ensaio de restauração passar
   de 35 dias (`docs/producao/backup.md`).
+- **Logs e saúde:** Administração → **Saúde** e o Grafana Cloud (`docs/producao/logs.md`).
 
 ## 3. Conter (primeira hora)
 
@@ -82,8 +83,29 @@ SQL() { $C exec -T postgres psql -U postgres -d omni -c "$1"; }
   `GRAVACOES_CHAVE_MESTRA` não podem ser ouvidas.
 - Reativar o que foi desligado no passo 3, um item por vez, conferindo os logs.
 
-## 7. Registrar e aprender
+## 7. Registrar e aprender (Administração → Incidentes)
 
-Registre em até 5 dias úteis: data e hora do conhecimento, o que aconteceu, dados e titulares
-afetados, medidas tomadas, comunicações feitas (com datas) e o que muda para não repetir.
-Guarde o registro com o encarregado (a ANPD pode pedir).
+Todo incidente vai para **Administração → Incidentes** (só quem tem o perfil admin; E21, migration
+0086), aberto já na primeira hora e completado depois. O registro:
+
+- **Aberto:** título, tipo, gravidade, quando começou, quando soubemos (conta o prazo do item 5) e o
+  que aconteceu.
+- **Resolvido:** com a hora em que voltou ao normal.
+- **Encerrado:** só com a **causa** (por que aconteceu, não o sintoma) e **o que muda para não
+  repetir** (correção, teste ou trava nova, com o PR nas referências). Se envolveu dado pessoal,
+  também **que dados e de quem** (categorias, sem nomes) e **as comunicações** feitas, com datas, ou
+  por que não foram necessárias. O banco recusa encerrar sem isso.
+- Não se apaga: a Resolução CD/ANPD nº 15/2024 pede a guarda por pelo menos 5 anos. Quem criou e
+  cada alteração (nomes dos campos, sem o texto) ficam no `audit_log` (`incidente.criado`,
+  `incidente.alterado`).
+- **Nada de dado pessoal no texto:** nada de nomes, e-mails, telefones ou trechos de mensagens.
+  Descreva por categoria ("telefones de contatos do WhatsApp, mascarados").
+
+Encerre em até 5 dias úteis depois de resolver. O encarregado de dados acompanha os que têm dado
+pessoal.
+
+### Quando abrir
+
+Abra um registro para tudo da lista do item 1 e também para: indisponibilidade percebida por quem
+usa, erro do sistema que afetou pessoas (não para todo erro da aba Erros), integração parada por
+mais de um dia e dado que saiu para onde não devia, mesmo sem risco.

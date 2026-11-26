@@ -151,6 +151,13 @@ describe("Omni de ponta a ponta", () => {
     // Saúde (E20).
     await adm.page.goto("/admin?aba=saude");
     await adm.page.getByRole("heading", { name: /Tarefas automáticas/ }).waitFor();
+    // Incidentes (E21): registra um e ele aparece na lista.
+    await adm.page.goto("/admin?aba=incidentes");
+    await adm.page.getByRole("button", { name: "Registrar incidente" }).click();
+    await adm.page.getByLabel("Título").fill("Incidente de teste e2e");
+    await adm.page.getByLabel("O que aconteceu").fill("Teste ponta a ponta do registro.");
+    await adm.page.getByRole("button", { name: "Salvar" }).click();
+    await adm.page.getByText("Incidente de teste e2e").waitFor();
     expect([...op.erros, ...dir.erros, ...adm.erros]).toEqual([]);
   });
 
