@@ -59,7 +59,14 @@ describe("máscara dos logs enviados ao Grafana (deploy/logs/config.alloy)", () 
     expect(mascarar(linha)).toBe(linha);
   });
 
-  it("deixa de fora a Evolution, o Redis dela e o serviço de voz", () => {
-    expect(CONFIG).toMatch(/regex\s+= "evolution\.\*\|voz"\s+action\s+= "drop"/);
+  it("deixa de fora a Evolution, o Redis dela e o serviço de voz já na descoberta, e descarta linha sem serviço", () => {
+    // Um drop nas relabel_rules do loki.source.docker NÃO descarta a linha: só tira os rótulos, e ela
+    // seguiria para o envio (visto em 26/11/2026). Por isso o drop fica no discovery.relabel que alimenta
+    // os alvos, e o loki.process descarta o que chegar sem o rótulo service.
+    const descoberta = CONFIG.match(/discovery\.relabel "so_omni" \{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(descoberta).toMatch(/targets\s+= discovery\.docker\.omni\.targets/);
+    expect(descoberta).toMatch(/regex\s+= "evolution\.\*\|voz"\s+action\s+= "drop"/);
+    expect(CONFIG).toMatch(/loki\.source\.docker "omni" \{[\s\S]*?targets\s+= discovery\.relabel\.so_omni\.output/);
+    expect(CONFIG).toMatch(/stage\.match \{\s*selector\s+= "\{service=\\"\\"\}"\s*action\s+= "drop"/);
   });
 });

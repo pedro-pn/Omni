@@ -7,136 +7,149 @@
 // apps/web/src/server/logs-mascara.test.ts confere cada máscara com linhas de exemplo.
 
 discovery.docker "omni" {
-  host             = "tcp://docker-proxy:2375"
-  refresh_interval = "30s"
+	host             = "tcp://docker-proxy:2375"
+	refresh_interval = "30s"
 
-  filter {
-    name   = "name"
-    values = ["omni"]
-  }
+	filter {
+		name   = "name"
+		values = ["omni"]
+	}
+}
+
+// Serviços de fora (conteúdo de mensagens e telefones) saem JÁ NA DESCOBERTA: um "drop" nas
+// relabel_rules do loki.source.docker não descarta a linha, só tira os rótulos dela, e a linha
+// seguiria para o envio (visto em 26/11/2026). A segunda trava está no loki.process.
+discovery.relabel "so_omni" {
+	targets = discovery.docker.omni.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "evolution.*|voz"
+		action        = "drop"
+	}
 }
 
 discovery.relabel "omni" {
-  targets = []
+	targets = []
 
-  // Serviços de fora (conteúdo de mensagens e telefones).
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-    regex         = "evolution.*|voz"
-    action        = "drop"
-  }
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
 
-  rule {
-    source_labels = ["__meta_docker_container_name"]
-    regex         = "/(.*)"
-    target_label  = "container"
-  }
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
 
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-    target_label  = "service"
-  }
+	rule {
+		source_labels = ["__meta_docker_container_log_stream"]
+		target_label  = "stream"
+	}
 
-  rule {
-    source_labels = ["__meta_docker_container_log_stream"]
-    target_label  = "stream"
-  }
+	// env próprio do Omni, para as buscas do filtroAPP (env="production") não misturarem.
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "omni"
+		replacement   = "omni-production"
+		target_label  = "env"
+	}
 
-  // env próprio do Omni, para as buscas do filtroAPP (env="production") não misturarem.
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
-    regex         = "omni"
-    replacement   = "omni-production"
-    target_label  = "env"
-  }
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "omni-staging"
+		replacement   = "omni-staging"
+		target_label  = "env"
+	}
 
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
-    regex         = "omni-staging"
-    replacement   = "omni-staging"
-    target_label  = "env"
-  }
-
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
-    regex         = "omni-logs"
-    replacement   = "omni-logs"
-    target_label  = "env"
-  }
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "omni-logs"
+		replacement   = "omni-logs"
+		target_label  = "env"
+	}
 }
 
 loki.source.docker "omni" {
-  host          = "tcp://docker-proxy:2375"
-  targets       = discovery.docker.omni.targets
-  relabel_rules = discovery.relabel.omni.rules
-  forward_to    = [loki.process.omni.receiver]
+	host          = "tcp://docker-proxy:2375"
+	targets       = discovery.relabel.so_omni.output
+	relabel_rules = discovery.relabel.omni.rules
+	forward_to    = [loki.process.omni.receiver]
 }
 
 loki.process "omni" {
-  // Postgres: os parâmetros de uma consulta podem trazer dado pessoal (o Omni já desliga com
-  // log_parameter_max_length=0; isto é a segunda trava).
-  stage.drop {
-    expression          = "DETAIL:\\s+[Pp]arameters:"
-    drop_counter_reason = "postgres_parameters"
-  }
+	// Segunda trava: linha sem o rótulo service (de contêiner que não deveria ser lido) não sai.
+	stage.match {
+		selector            = "{service=\"\"}"
+		action              = "drop"
+		drop_counter_reason = "sem_servico"
+	}
 
-  // Senha em URL de conexão (postgres://usuario:senha@host).
-  stage.replace {
-    expression = "://[^:/\\s]+:([^@\\s]+)@"
-    replace    = "<redacted>"
-  }
+	// Postgres: os parâmetros de uma consulta podem trazer dado pessoal (o Omni já desliga com
+	// log_parameter_max_length=0; isto é a segunda trava).
+	stage.drop {
+		expression          = "DETAIL:\\s+[Pp]arameters:"
+		drop_counter_reason = "postgres_parameters"
+	}
 
-  // Chave da API de tarefas (foco_live_...).
-  stage.replace {
-    expression = "\\b(foco_live_[A-Za-z0-9]{8,})"
-    replace    = "<api-token>"
-  }
+	// Senha em URL de conexão (postgres://usuario:senha@host).
+	stage.replace {
+		expression = "://[^:/\\s]+:([^@\\s]+)@"
+		replace    = "<redacted>"
+	}
 
-  // Cabeçalho Authorization: Bearer <token>.
-  stage.replace {
-    expression = "(?i)bearer\\s+([A-Za-z0-9._~+/=-]+)"
-    replace    = "<token>"
-  }
+	// Chave da API de tarefas (foco_live_...).
+	stage.replace {
+		expression = "\\b(foco_live_[A-Za-z0-9]{8,})"
+		replace    = "<api-token>"
+	}
 
-  // Segredos em query string.
-  stage.replace {
-    expression = "(?i)[?&#](?:token|access_token|api_key|apikey|key|code|password|senha|secret|signature|validationToken|state)=([^&\\s\"]+)"
-    replace    = "<redacted>"
-  }
+	// Cabeçalho Authorization: Bearer <token>.
+	stage.replace {
+		expression = "(?i)bearer\\s+([A-Za-z0-9._~+/=-]+)"
+		replace    = "<token>"
+	}
 
-  // E-mail (inclui o identificador do WhatsApp, numero@s.whatsapp.net).
-  stage.replace {
-    expression = "([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+)"
-    replace    = "<email>"
-  }
+	// Segredos em query string.
+	stage.replace {
+		expression = "(?i)[?&#](?:token|access_token|api_key|apikey|key|code|password|senha|secret|signature|validationToken|state)=([^&\\s\"]+)"
+		replace    = "<redacted>"
+	}
 
-  // CPF formatado.
-  stage.replace {
-    expression = "(\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2})"
-    replace    = "<cpf>"
-  }
+	// E-mail (inclui o identificador do WhatsApp, numero@s.whatsapp.net).
+	stage.replace {
+		expression = "([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+)"
+		replace    = "<email>"
+	}
 
-  // Telefone com DDI 55 (como o WhatsApp manda: 55 + DDD + número).
-  stage.replace {
-    expression = "\\b(55\\d{10,11})\\b"
-    replace    = "<telefone>"
-  }
+	// CPF formatado.
+	stage.replace {
+		expression = "(\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2})"
+		replace    = "<cpf>"
+	}
 
-  forward_to = [loki.write.grafana_cloud.receiver]
+	// Telefone com DDI 55 (como o WhatsApp manda: 55 + DDD + número).
+	stage.replace {
+		expression = "\\b(55\\d{10,11})\\b"
+		replace    = "<telefone>"
+	}
+
+	forward_to = [loki.write.grafana_cloud.receiver]
 }
 
 loki.write "grafana_cloud" {
-  endpoint {
-    url = sys.env("GRAFANA_LOGS_URL")
+	endpoint {
+		url = sys.env("GRAFANA_LOGS_URL")
 
-    basic_auth {
-      username = sys.env("GRAFANA_LOGS_USER")
-      password = sys.env("GRAFANA_LOGS_TOKEN")
-    }
-  }
+		basic_auth {
+			username = sys.env("GRAFANA_LOGS_USER")
+			password = sys.env("GRAFANA_LOGS_TOKEN")
+		}
+	}
 
-  external_labels = {
-    host = coalesce(sys.env("LOGS_HOST"), "vps"),
-    app  = "omni",
-  }
+	external_labels = {
+		host = coalesce(sys.env("LOGS_HOST"), "vps"),
+		app  = "omni",
+	}
 }
