@@ -52,9 +52,9 @@ registro do que foi feito e de onde está.
 | Entrega | Pilar | Situação | O que foi feito |
 |---|---|---|---|
 | E19 Tempo por rota e consultas lentas | 11.1 | ✅ | `desempenho_rotas` (0084), `pg_stat_statements`, Administração → Desempenho (`docs/producao/desempenho.md`). |
-| E20 Logs centrais e painel de saúde | 12.2, 12.3 | 🟡 | Logs mascarados no Grafana Cloud (`deploy/logs`), rotação local e Administração → Saúde (0085, `docs/producao/logs.md`). Falta a conferência final no Grafana. |
+| E20 Logs centrais e painel de saúde | 12.2, 12.3 | ✅ | Logs mascarados no Grafana Cloud (`deploy/logs`), rotação local e Administração → Saúde (0085, `docs/producao/logs.md`). Conferido no Grafana em 26/11. |
 | E21 Registro de incidentes com causa | 12.4 | ✅ | Administração → Incidentes (0086): encerrar exige causa e correção; sem exclusão. Primeiro registro: o envio indevido de logs na ativação da E20 (PR #33). |
-| E22 README, glossário e mapa de variáveis | 13 | 🟡 | `README.md`, `docs/glossario.md`, `docs/variaveis.md` (com teste) e este arquivo. |
+| E22 README, glossário e mapa de variáveis | 13 | ✅ | `README.md`, `docs/glossario.md`, `docs/variaveis.md` (com teste) e este arquivo. |
 
 ## Como uma entrega é feita
 
