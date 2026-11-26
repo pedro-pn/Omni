@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { MetaFiltroApp } from "@omni/core";
 import {
   bigint,
+  bigserial,
   boolean,
   customType,
   date,
@@ -57,6 +58,8 @@ export const people = pgTable("people", {
   entraAtribuido: boolean("entra_atribuido"),
   entraSincronizadoEm: timestamp("entra_sincronizado_em", { withTimezone: true }),
   inativoPor: text("inativo_por", { enum: ["entra", "admin"] }),
+  /** 0081: quando foi desativada (gatilho); as tarefas pessoais vencem 2 anos depois. */
+  deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
 });
 
 export const personProfiles = pgTable(
@@ -1510,4 +1513,17 @@ export const systemErrors = pgTable("system_errors", {
   alertedAt: timestamp("alerted_at", { withTimezone: true }),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   reviewedBy: uuid("reviewed_by").references(() => people.id),
+});
+
+// ---------------------------------------------------------------- 0081: retenção dos dados de negócio
+
+/** Arquivos do SharePoint (canais e tarefas) que a retenção venceu; o worker apaga de vez. */
+export const arquivosParaApagar = pgTable("arquivos_para_apagar", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  spDriveId: text("sp_drive_id").notNull(),
+  spItemId: text("sp_item_id").notNull(),
+  origem: text("origem", { enum: ["canal", "tarefa"] }).notNull(),
+  tentativas: integer("tentativas").notNull().default(0),
+  ultimoErro: text("ultimo_erro"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
