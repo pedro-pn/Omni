@@ -252,6 +252,21 @@ describe("ações nas mensagens pelo webhook (0087)", () => {
     expect(foto).toMatchObject({ citada: null, encaminhada: false });
   });
 
+  it("o que não se mostra não vira mensagem (a conversa não sobe); álbum, vídeo redondo e mensagem de empresa viram", () => {
+    for (const nada of [
+      { secretEncryptedMessage: { secretEncType: 2, encPayload: "x", encIv: "y" }, messageContextInfo: {} },
+      { messageHistoryNotice: {}, messageContextInfo: {} },
+      { albumMessage: { expectedImageCount: 3 } },
+      { senderKeyDistributionMessage: {}, messageContextInfo: {} },
+      { messageContextInfo: {} },
+    ]) expect(upsert(nada)).toEqual([]);
+    expect(upsert({ associatedChildMessage: { message: { imageMessage: { caption: "Obra" } } } })[0]).toMatchObject({ tipo: "mensagem", conteudo: "imagem", texto: "Obra" });
+    expect(upsert({ ptvMessage: {} })[0]).toMatchObject({ conteudo: "video" });
+    expect(upsert({ templateMessage: { hydratedTemplate: { hydratedContentText: "Seu pedido saiu" } } })[0]).toMatchObject({ conteudo: "texto", texto: "Seu pedido saiu" });
+    expect(upsert({ interactiveMessage: { body: { text: "Escolha uma opção" } } })[0]).toMatchObject({ conteudo: "texto", texto: "Escolha uma opção" });
+    expect(upsert({ pollCreationMessage: { name: "Enquete" } })[0]).toMatchObject({ conteudo: "outro" });
+  });
+
   it("marcações no grupo: os JIDs de mentionedJid, sem repetir e só de pessoa", () => {
     const [e] = upsert(
       { extendedTextMessage: { text: "@222222222222222 e @5547900000012, olhem", contextInfo: { mentionedJid: ["222222222222222@lid", "5547900000012@s.whatsapp.net", "222222222222222@lid", "120363000000000001@g.us", 7] } } },

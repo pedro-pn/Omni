@@ -83,7 +83,9 @@ function desembrulhar(m: Record<string, unknown>): Record<string, unknown> {
       o(m.ephemeralMessage).message ??
       o(m.viewOnceMessage).message ??
       o(m.viewOnceMessageV2).message ??
-      o(m.documentWithCaptionMessage).message;
+      o(m.documentWithCaptionMessage).message ??
+      // Foto/vídeo de um álbum: chega embrulhada na mensagem "filha" do álbum.
+      o(m.associatedChildMessage).message;
     if (!dentro || typeof dentro !== "object") break;
     m = dentro as Record<string, unknown>;
   }
@@ -97,6 +99,8 @@ export function conteudoDaMensagem(bruta: Record<string, unknown>): { conteudo: 
   if ("extendedTextMessage" in m) return { conteudo: "texto", texto: s(o(m.extendedTextMessage).text), arquivo: null };
   if ("imageMessage" in m) return { conteudo: "imagem", texto: s(o(m.imageMessage).caption), arquivo: null };
   if ("videoMessage" in m) return { conteudo: "video", texto: s(o(m.videoMessage).caption), arquivo: null };
+  // Vídeo redondo (gravado na hora).
+  if ("ptvMessage" in m) return { conteudo: "video", texto: null, arquivo: null };
   if ("audioMessage" in m) return { conteudo: "audio", texto: null, arquivo: null };
   if ("documentMessage" in m) {
     const d = o(m.documentMessage);
@@ -105,7 +109,21 @@ export function conteudoDaMensagem(bruta: Record<string, unknown>): { conteudo: 
   if ("stickerMessage" in m) return { conteudo: "figurinha", texto: null, arquivo: null };
   if ("locationMessage" in m || "liveLocationMessage" in m) return { conteudo: "localizacao", texto: s(o(m.locationMessage).name ?? o(m.locationMessage).address), arquivo: null };
   if ("contactMessage" in m || "contactsArrayMessage" in m) return { conteudo: "contato", texto: s(o(m.contactMessage).displayName), arquivo: null };
-  const ignorados = ["reactionMessage", "protocolMessage", "senderKeyDistributionMessage", "pollUpdateMessage", "messageContextInfo", "editedMessage", "keepInChatMessage", "pinInChatMessage"];
+  // Mensagens de empresa (modelo e interativa): o texto delas.
+  if ("templateMessage" in m || "interactiveMessage" in m) {
+    const t = o(m.templateMessage);
+    const h = o(t.hydratedTemplate ?? t.hydratedFourRowTemplate);
+    const i = o(m.interactiveMessage);
+    const texto = s(h.hydratedContentText) ?? s(o(t.fourRowTemplate).content) ?? s(o(i.body).text) ?? s(h.hydratedTitleText) ?? s(o(i.header).title);
+    return texto ? { conteudo: "texto", texto, arquivo: null } : { conteudo: "outro", texto: null, arquivo: null };
+  }
+  // Nada que se mostre: reação, protocolo, troca de chaves do grupo, edição criptografada dos
+  // aparelhos novos (secretEncryptedMessage), aviso de histórico, cabeçalho do álbum (as fotos
+  // chegam à parte). Se virassem mensagem, a conversa subia na lista com "[mensagem]".
+  const ignorados = [
+    "reactionMessage", "protocolMessage", "senderKeyDistributionMessage", "pollUpdateMessage", "messageContextInfo", "editedMessage",
+    "keepInChatMessage", "pinInChatMessage", "secretEncryptedMessage", "messageHistoryNotice", "albumMessage", "encReactionMessage",
+  ];
   const chaves = Object.keys(m).filter((k) => k !== "messageContextInfo");
   if (!chaves.length || chaves.every((k) => ignorados.includes(k))) return null;
   return { conteudo: "outro", texto: null, arquivo: null };
