@@ -288,7 +288,8 @@ if (env.WHATSAPP_EVOLUTION_URL && env.WHATSAPP_EVOLUTION_KEY) {
   // Agenda do celular (0088): só com a ponte de ações ligada na Evolution.
   if (env.WHATSAPP_ACOES_URL && env.WHATSAPP_ACOES_TOKEN) {
     const ponte = new PonteDeAcoes({ url: env.WHATSAPP_ACOES_URL, token: env.WHATSAPP_ACOES_TOKEN });
-    await tarefa("whatsapp-agenda", "20 */6 * * *", () => lerAgendas(db, ponte));
+    // Não roda na partida: a ponte só escuta depois que a Evolution reconecta os números.
+    await tarefa("whatsapp-agenda", "20 */6 * * *", () => lerAgendas(db, ponte), false);
   }
 } else {
   console.warn("[worker] WhatsApp não configurado (WHATSAPP_EVOLUTION_*): conferência dos números desligada");

@@ -13,6 +13,27 @@ const MAX_CORPO = 64 * 1024;
 const digitos = (s) => String(s ?? '').replace(/\D/g, '');
 const SETE_DIAS = 7 * 24 * 3600;
 
+/** Durante a leitura, copia as mensagens de sincronização do log do Baileys (só o texto e a primeira linha do erro). */
+function escutarLog(logger, destino) {
+  if (!logger) return () => {};
+  const originais = {};
+  for (const nivel of ['info', 'warn', 'error', 'debug']) {
+    if (typeof logger[nivel] !== 'function') continue;
+    originais[nivel] = logger[nivel];
+    logger[nivel] = function (obj, msg) {
+      try {
+        const texto = typeof obj === 'string' ? obj : String(msg ?? '');
+        if (/sync|snapshot|app.?state|patch|key/i.test(texto) && destino.length < 20) {
+          const erro = obj && typeof obj === 'object' ? String(obj.error ?? obj.err?.stack ?? obj.err?.message ?? '').split('\n')[0] : '';
+          destino.push(`${nivel}: ${texto.slice(0, 160)}${erro ? ` — ${erro.slice(0, 200)}` : ''}`);
+        }
+      } catch {}
+      return originais[nivel].apply(this, arguments);
+    };
+  }
+  return () => Object.assign(logger, originais);
+}
+
 export class PonteDeAcoes {
   constructor({ token, port = 8099, host = '127.0.0.1', hostname = '127.0.0.1', escutar = true }) {
     if (typeof token !== 'string' || token.length < 32 || !Number.isInteger(port) || port < 1024 || port > 65535 ||
@@ -26,8 +47,8 @@ export class PonteDeAcoes {
     }
   }
 
-  attach(sock) {
-    const linha = { sock, contatos: new Map(), sincronizado: false, eventos: 0, comNome: 0 };
+  attach(sock, logger = null) {
+    const linha = { sock, logger, contatos: new Map(), sincronizado: false, eventos: 0, comNome: 0, historico: false };
     this.linhas.set(sock.ws, linha);
     // Só o que vem da agenda (contactAction e o histórico) traz `name`; o nome de perfil vem em `notify`.
     const guardar = (lista) => {
@@ -44,7 +65,10 @@ export class PonteDeAcoes {
     sock.ev.on('contacts.upsert', guardar);
     sock.ev.on('contacts.update', guardar);
     // Histórico do pareamento: traz os contatos com o nome da agenda.
-    sock.ev.on('messaging-history.set', (h) => guardar(h?.contacts));
+    sock.ev.on('messaging-history.set', (h) => {
+      if (Array.isArray(h?.contacts) && h.contacts.length) linha.historico = true;
+      guardar(h?.contacts);
+    });
     sock.ev.on('connection.update', (u) => {
       if (u.connection === 'close') this.linhas.delete(sock.ws);
     });
@@ -66,16 +90,28 @@ export class PonteDeAcoes {
   async contatos(linha, recarregar = false) {
     const antes = { eventos: linha.eventos, comNome: linha.comNome };
     let versao = null;
+    const mensagens = [];
     if (!linha.sincronizado || recarregar) {
-      await linha.sock.authState.keys.set({ 'app-state-sync-version': { critical_unblock_low: null } });
-      await linha.sock.resyncAppState(['critical_unblock_low'], true);
+      // O Baileys não devolve erro quando a coleção falha: só registra no log (que pode estar
+      // desligado). Durante a leitura, guarda as mensagens de sincronização (sem os dados).
+      const desfazer = escutarLog(linha.logger, mensagens);
+      try {
+        await linha.sock.authState.keys.set({ 'app-state-sync-version': { critical_unblock_low: null } });
+        await linha.sock.resyncAppState(['critical_unblock_low'], true);
+      } finally {
+        desfazer();
+      }
       const v = await linha.sock.authState.keys.get('app-state-sync-version', ['critical_unblock_low']);
       versao = v?.critical_unblock_low?.version ?? 0;
-      linha.sincronizado = true;
+      linha.sincronizado = versao > 0;
+      if (versao > 0) linha.colecaoBaixada = true;
     }
     return {
       contatos: [...linha.contatos.values()],
+      // Completa: a coleção dos contatos baixou ou o histórico do pareamento chegou nesta sessão.
+      completa: Boolean(linha.colecaoBaixada || linha.historico),
       diagnostico: { versaoDaColecao: versao, eventosNaLeitura: linha.eventos - antes.eventos, comNomeNaLeitura: linha.comNome - antes.comNome, eventosDesdeOInicio: linha.eventos, salvosEmMemoria: linha.contatos.size },
+      mensagens,
     };
   }
 
