@@ -114,6 +114,8 @@ export const auditLog = pgTable("audit_log", {
 
 /** Espelho de leitura do filtroAPP (0002). Só o worker escreve. */
 export const missions = pgTable("missions", {
+  /** 0083: quando ficou inativa (gatilho); a retenção conta daqui se não houver data de encerramento. */
+  inativadaEm: timestamp("inativada_em", { withTimezone: true }),
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
   filtroappProjectId: text("filtroapp_project_id").notNull().unique(),
