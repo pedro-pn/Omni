@@ -1529,3 +1529,21 @@ export const arquivosParaApagar = pgTable("arquivos_para_apagar", {
   ultimoErro: text("ultimo_erro"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------- 0084: desempenho (E19)
+
+/** Tempo por rota, somado por hora (o web grava por app.registrar_desempenho; só admin lê). */
+export const desempenhoRotas = pgTable(
+  "desempenho_rotas",
+  {
+    hora: timestamp("hora", { withTimezone: true }).notNull(),
+    rota: text("rota").notNull(),
+    n: integer("n").notNull(),
+    somaMs: bigint("soma_ms", { mode: "number" }).notNull(),
+    maxMs: integer("max_ms").notNull(),
+    erros: integer("erros").notNull().default(0),
+    /** Contagem por faixa: até 50, 100, 250, 500, 1000, 2500, 5000 ms e acima. */
+    faixas: integer("faixas").array().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.hora, t.rota] })],
+);

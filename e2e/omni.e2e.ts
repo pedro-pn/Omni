@@ -142,7 +142,13 @@ describe("Omni de ponta a ponta", () => {
     const dir = await entrar("e2e.diretoria@omni.invalid");
     await dir.page.goto("/admin?aba=seguranca");
     await dir.page.getByRole("link", { name: "Segurança" }).waitFor();
-    expect([...op.erros, ...dir.erros]).toEqual([]);
+    // Desempenho (E19): só para quem administra.
+    await pessoa("e2e.admin@omni.invalid", ["admin"]);
+    const adm = await entrar("e2e.admin@omni.invalid");
+    await adm.page.goto("/admin?aba=desempenho");
+    await adm.page.getByRole("heading", { name: "Tempo por rota e ação" }).waitFor();
+    await adm.page.getByRole("heading", { name: "Consultas mais lentas no banco" }).waitFor();
+    expect([...op.erros, ...dir.erros, ...adm.erros]).toEqual([]);
   });
 
   it("missão abre no Resumo com o acompanhamento do filtroAPP", async () => {
