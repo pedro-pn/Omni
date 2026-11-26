@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import pg from "pg";
 import { chromium, type Browser, type Page } from "playwright";
@@ -9,17 +9,23 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * trilho sem erro de JavaScript, tarefa criada e concluída, Administração fechada
  * para quem não administra e missão aberta no Resumo.
  *
- * Uso: `npm run dev` (AUTH_DEV_LOGIN=on) e, noutro terminal, `npm run e2e`.
+ * Uso: `npm run dev` (AUTH_DEV_LOGIN=on) e, noutro terminal, `npm run e2e`. No CI (E18) roda contra o
+ * build de produção com a CSP bloqueando (`e2e/servidor.sh`): violação de CSP conta como erro da tela.
  * Pessoas de teste: e2e.*@omni.invalid (perfis dados aqui pelo dono do banco).
  */
 
 const BASE = process.env.E2E_URL ?? "http://localhost:3000";
-const env = Object.fromEntries(
-  readFileSync(new URL("../.env", import.meta.url), "utf8")
-    .split("\n")
-    .filter((l) => /^[A-Z0-9_]+=/.test(l))
-    .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "")]),
-);
+const arquivoEnv = new URL("../.env", import.meta.url);
+// O ambiente do processo vale sobre o .env (no CI não há .env).
+const env: Record<string, string | undefined> = {
+  ...Object.fromEntries(
+    (existsSync(arquivoEnv) ? readFileSync(arquivoEnv, "utf8") : "")
+      .split("\n")
+      .filter((l) => /^[A-Z0-9_]+=/.test(l))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "")]),
+  ),
+  ...process.env,
+};
 
 let browser: Browser;
 let owner: pg.Pool;
@@ -40,6 +46,10 @@ async function entrar(email: string, volta = "/?ver=tarefas"): Promise<{ page: P
   const page = await ctx.newPage();
   const erros: string[] = [];
   page.on("pageerror", (e) => erros.push(e.message));
+  // Com CSP_MODO=aplicar, o navegador recusa e avisa no console ("…violates the following Content Security Policy…").
+  page.on("console", (m) => {
+    if (/Content Security Policy/i.test(m.text())) erros.push(`CSP: ${m.text().slice(0, 300)}`);
+  });
   await page.goto(`/entrar?volta=${encodeURIComponent(volta)}`);
   await page.getByRole("textbox", { name: "E-mail" }).fill(email);
   await page.getByRole("textbox", { name: "Nome" }).fill(email.split("@")[0]!);
@@ -123,16 +133,34 @@ describe("Omni de ponta a ponta", () => {
     expect(r.status()).toBeGreaterThanOrEqual(300);
     expect(r.status()).toBeLessThan(400);
     expect(new URL(r.headers().location ?? "", BASE).pathname).toBe("/");
+    // Baixar meus dados (E15): só os da própria pessoa.
+    const dados = await op.page.request.get("/api/meus-dados");
+    expect(dados.status()).toBe(200);
+    expect(dados.headers()["content-disposition"]).toMatch(/attachment; filename="omni-meus-dados-/);
+    expect((await dados.json()).pessoa.email).toBe("e2e.operacao@omni.invalid");
     await pessoa("e2e.diretoria@omni.invalid", ["diretoria"]);
     const dir = await entrar("e2e.diretoria@omni.invalid");
     await dir.page.goto("/admin?aba=seguranca");
     await dir.page.getByRole("link", { name: "Segurança" }).waitFor();
-    expect([...op.erros, ...dir.erros]).toEqual([]);
+    // Desempenho (E19): só para quem administra.
+    await pessoa("e2e.admin@omni.invalid", ["admin"]);
+    const adm = await entrar("e2e.admin@omni.invalid");
+    await adm.page.goto("/admin?aba=desempenho");
+    await adm.page.getByRole("heading", { name: "Tempo por rota e ação" }).waitFor();
+    await adm.page.getByRole("heading", { name: "Consultas mais lentas no banco" }).waitFor();
+    // Saúde (E20).
+    await adm.page.goto("/admin?aba=saude");
+    await adm.page.getByRole("heading", { name: /Tarefas automáticas/ }).waitFor();
+    expect([...op.erros, ...dir.erros, ...adm.erros]).toEqual([]);
   });
 
   it("missão abre no Resumo com o acompanhamento do filtroAPP", async () => {
+    // Sem missões sincronizadas (CI), cria uma fictícia; o Resumo abre do mesmo jeito.
+    await owner.query(
+      `INSERT INTO missions (code, filtroapp_project_id, client_name, is_active, filtroapp_updated_at)
+       SELECT '9901', 'e2e-9901', 'Cliente fictício', true, now() WHERE NOT EXISTS (SELECT 1 FROM missions WHERE is_active)`,
+    );
     const [m] = (await owner.query("SELECT id FROM missions WHERE is_active ORDER BY code LIMIT 1")).rows;
-    if (!m) return; // banco sem missões sincronizadas
     await pessoa("e2e.diretoria@omni.invalid", ["diretoria"]);
     const { page, erros } = await entrar("e2e.diretoria@omni.invalid");
     await page.goto(`/?missao=${m.id}`);

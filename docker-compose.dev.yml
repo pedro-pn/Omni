@@ -3,6 +3,20 @@
 services:
   postgres:
     image: postgres:16-alpine
+    # Desempenho (E19): estatística das consultas (pg_stat_statements, sem os valores) e log das que
+    # passam de 500 ms, sem os parâmetros (podem ter dado pessoal). docs/producao/desempenho.md.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - log_parameter_max_length=0
+      - -c
+      - log_parameter_max_length_on_error=0
     environment:
       POSTGRES_DB: omni
       POSTGRES_USER: postgres

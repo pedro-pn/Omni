@@ -3,7 +3,7 @@
 # 172.17.0.1:<porta> e o Caddy chega por host.docker.internal.
 # Portas já usadas na VPS: 8081 filtroboard, 8082 whatsapp do Prisma, 8083 comercial,
 # 8084 Omni (produção), 8085 Omni (staging), 8086 áudio das chamadas (produção),
-# 8087 outro serviço (ocupada), 8088 áudio das chamadas (staging) — OMNI_AUDIO_PORT.
+# 8087 áudio das chamadas (staging) — OMNI_AUDIO_PORT.
 #
 # Passo a passo completo: docs/producao/deploy.md. Cada ambiente é um projeto do compose
 # (volumes e redes separados):
@@ -41,9 +41,32 @@ x-db-urls: &db-urls
   DATABASE_URL_APP: postgres://omni_app:${OMNI_APP_PASSWORD}@postgres:5432/omni
   DATABASE_URL_WORKER: postgres://omni_worker:${OMNI_WORKER_PASSWORD}@postgres:5432/omni
 
+# Rotação dos logs (E20): até 5 arquivos de 20 MB por contêiner, para não encher o disco. Os logs
+# do web, do worker e do Postgres também vão ao Grafana Cloud (deploy/logs, docs/producao/logs.md).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
+    logging: *logging
     image: postgres:16-alpine
+    # Desempenho (E19): estatística das consultas (pg_stat_statements, sem os valores) e log das que
+    # passam de 500 ms, sem os parâmetros (podem ter dado pessoal). docs/producao/desempenho.md.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - log_parameter_max_length=0
+      - -c
+      - log_parameter_max_length_on_error=0
     restart: unless-stopped
     environment:
       POSTGRES_DB: omni
@@ -65,6 +88,7 @@ services:
     networks: [interna]
 
   migrate:
+    logging: *logging
     build: { context: .., target: migrate }
     environment:
       DATABASE_URL_OWNER: postgres://omni_owner:${OMNI_OWNER_PASSWORD}@postgres:5432/omni
@@ -74,6 +98,7 @@ services:
     networks: [interna]
 
   web:
+    logging: *logging
     build: { context: .., target: web, args: { OMNI_VERSAO: "${OMNI_VERSAO:-desconhecida}" } }
     restart: unless-stopped
     environment:
@@ -110,9 +135,14 @@ services:
       IA_ALERTAS: ${IA_ALERTAS:-desligada}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      # Teto diário da IA (E11): tokens e chamadas por dia, somados no banco (web e worker)
+      IA_TETO_TOKENS_DIA: ${IA_TETO_TOKENS_DIA:-2000000}
+      IA_TETO_CHAMADAS_DIA: ${IA_TETO_CHAMADAS_DIA:-3000}
       WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
       # Chamadas pessoais do WhatsApp (perfil "chamadas"): serviço de voz pela rede interna
       CHAMADAS_HABILITADAS: ${CHAMADAS_HABILITADAS:-off}
+      # CSP das páginas (E12): "relatorio" só relata violações (Administração → Erros); "aplicar" bloqueia.
+      CSP_MODO: ${CSP_MODO:-relatorio}
       # Abre as gravações cifradas do SharePoint para tocar (a mesma chave do worker)
       GRAVACOES_CHAVE_MESTRA: ${GRAVACOES_CHAVE_MESTRA:-}
       CHAMADAS_SERVICO_URL: ${CHAMADAS_SERVICO_URL:-}
@@ -126,6 +156,7 @@ services:
     networks: [interna]
 
   worker:
+    logging: *logging
     build: { context: .., target: worker, args: { OMNI_VERSAO: "${OMNI_VERSAO:-desconhecida}" } }
     restart: unless-stopped
     environment:
@@ -146,6 +177,9 @@ services:
       # IA v2 (ADR 0005): leitura dos RDOs, resumo de reuniões e alertas pedidos à IA (todas desligadas por padrão)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      # Teto diário da IA (E11): tokens e chamadas por dia, somados no banco (web e worker)
+      IA_TETO_TOKENS_DIA: ${IA_TETO_TOKENS_DIA:-2000000}
+      IA_TETO_CHAMADAS_DIA: ${IA_TETO_CHAMADAS_DIA:-3000}
       IA_LEITURA_RDO: ${IA_LEITURA_RDO:-desligada}
       IA_RESUMO_REUNIAO: ${IA_RESUMO_REUNIAO:-desligada}
       IA_ALERTAS: ${IA_ALERTAS:-desligada}
@@ -195,6 +229,7 @@ services:
   # Evolution chama o webhook em http://web:3000 pela rede interna. O painel da
   # Evolution não é usado (pareamento pela Administração do Omni).
   evolution:
+    logging: *logging
     profiles: [whatsapp]
     # Mesmo patch de presença + a ponte das chamadas (inerte sem OMNI_CHAMADA_PONTE).
     build:
@@ -269,6 +304,7 @@ services:
   # do áudio do navegador (8099, apenas /omni/audio) é publicada para o Caddy.
   # Gravações no volume chamadas_data (backup em deploy/backup.sh).
   voz:
+    logging: *logging
     profiles: [chamadas]
     build: ../experiments/whatsapp-chamada
     image: omni-chamadas-voz:1
@@ -306,6 +342,7 @@ services:
     networks: [interna]
 
   evolution-postgres:
+    logging: *logging
     profiles: [whatsapp]
     image: postgres:16-alpine
     restart: unless-stopped
@@ -324,6 +361,7 @@ services:
     networks: [whatsapp-dados]
 
   evolution-redis:
+    logging: *logging
     profiles: [whatsapp]
     image: redis:7-alpine
     restart: unless-stopped

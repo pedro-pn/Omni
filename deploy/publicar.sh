@@ -36,6 +36,18 @@ esac
 # quando a pasta ainda está num commit sem o script).
 cd "${OMNI_DIR:-$(dirname "$0")/..}"
 [ -f "$ENVFILE" ] || { echo "faltando $ENVFILE" >&2; exit 2; }
+# Um ambiente por pasta (E07): publicar troca o commit da pasta, então produção e staging na mesma
+# pasta se atropelam. Produção em ~/apps/Omni (só .env.production), staging em ~/apps/Omni-staging
+# (só .env.staging).
+case "$AMBIENTE" in
+  staging) OUTRO=deploy/.env.production ;;
+  producao) OUTRO=deploy/.env.staging ;;
+esac
+if [ -f "$OUTRO" ]; then
+  echo "esta pasta também tem $OUTRO: produção e staging precisam de pastas separadas" >&2
+  echo "(produção em ~/apps/Omni, staging em ~/apps/Omni-staging; docs/producao/deploy.md, seção 3.3)" >&2
+  exit 2
+fi
 PORTA="$(grep -E '^OMNI_WEB_PORT=' "$ENVFILE" | cut -d= -f2 || true)"
 PORTA="${PORTA:-$PORTA_PADRAO}"
 SAUDE="http://172.17.0.1:${PORTA}/api/saude"

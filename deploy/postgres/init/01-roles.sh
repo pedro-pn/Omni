@@ -28,6 +28,10 @@ GRANT CONNECT ON DATABASE :"db" TO omni_app, omni_worker;
 
 CREATE EXTENSION IF NOT EXISTS citext;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Desempenho (E19): estatística das consultas; o dono lê o texto normalizado das consultas de todos
+-- os papéis (app.consultas_lentas, só para admin). Carregada pelo shared_preload_libraries do compose.
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+GRANT pg_read_all_stats TO omni_owner;
 
 -- Fila de jobs (pg-boss). O worker é dono; o web só enfileira.
 -- O pg-boss roda CREATE SCHEMA IF NOT EXISTS no start, e o Postgres exige CREATE no

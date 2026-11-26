@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { createPool, createWorkerDb } from "@omni/db";
 import { FiltroAppClient } from "@omni/integrations/filtroapp";
 import { GraphClient } from "@omni/integrations/graph";
-import { OpenAiClient } from "@omni/integrations/openai";
 import { EvolutionClient } from "@omni/integrations/whatsapp";
 import { PrismaClient } from "@omni/integrations/prisma";
 import { PgBoss } from "pg-boss";
@@ -34,14 +33,16 @@ import { enviarLembretes } from "./tarefas/lembretes.ts";
 import { buscarAudioNoServico, resumirChamadas, apagarAudioNoServico, type DepsResumoChamadas } from "./chamadas/resumo.ts";
 import { arquivarGravacoes } from "./chamadas/arquivar.ts";
 import { chaveMestra, decifrarGravacao, desembrulharChave } from "@omni/integrations/gravacoes";
-import { sql } from "drizzle-orm";
 import { ffmpegDisponivel, m4aParaWavMono, wavParaM4a } from "./chamadas/ffmpeg.ts";
 import { detectarChegadas } from "./ia/chegadas.ts";
 import { lerAssinaturas } from "./ia/assinaturas.ts";
 import { vincularPelasAssinaturas } from "./contatos/assinaturas.ts";
 import { enviarAvisosPorEmail, enviarResumoSemanal, type EnviarEmail } from "./tarefas/emails.ts";
 import { vigiarRiscos } from "./seguranca/riscos.ts";
+import { aplicarRetencao } from "./operacao/retencao.ts";
+import { registrarSaude } from "./operacao/saude.ts";
 import { avisarErros, conferirOperacao, registrarErroDoWorker } from "./operacao/erros.ts";
+import { conferidorDoTeto, openAiComTeto } from "./operacao/teto-ia.ts";
 
 /**
  * Worker do Omni. Filas pg-boss com política `exclusive` (nunca duas execuções
@@ -66,9 +67,10 @@ import { avisarErros, conferirOperacao, registrarErroDoWorker } from "./operacao
  *   entra-pessoas       1 h     quem está atribuído ao app "Omni" no Entra → Pessoas; quem sai é desativado
  *   teams-reunioes     15 min  agenda das caixas: reuniões ligadas a missões; transcrição → resumo (IA_RESUMO_REUNIAO) no Gerencial
  *   whatsapp-estado     5 min  confere na Evolution do Omni o estado dos números (o webhook avisa na hora)
- *   retencao           03:40   retenção por tipo de dado (RETENCAO: ensaio só conta, real apaga)
+ *   retencao           03:40   retenção por tipo de dado (RETENCAO: ensaio só conta, real apaga e apaga de vez no SharePoint os arquivos vencidos)
  *   riscos             10 min  alertas de risco: download em massa e arquivos enviados para fora (Administração e diretoria)
  *   alertas-erros       5 min  erros do sistema novos (ou que voltaram depois de 6 h) → aviso no sino e no celular de quem é admin
+ *   saude               5 min  painel de saúde: versão e memória do worker e o status do backup (Administração → Saúde)
  *   saude-operacao      1 h    status do backup e do ensaio de restauração (OPERACAO_STATUS=ligado) → erro do sistema se passar do limite
  *   whatsapp-recuperar 10 min  relê as últimas 2 h na Evolution e grava o que o webhook perdeu
  *   whatsapp-perfis    30 min  nome dos grupos e endereço da foto das conversas (lista da Evolution)
@@ -103,6 +105,9 @@ process.on("uncaughtException", (erro) => {
   console.error("[worker] exceção não tratada:", erro);
   void registrarErroDoWorker(db, erro, "processo").finally(() => process.exit(1));
 });
+
+// Teto diário da IA (E11): todo cliente da OpenAI do worker confere o gasto do dia antes de chamar.
+const tetoIa = conferidorDoTeto(db, { tokens: env.IA_TETO_TOKENS_DIA, chamadas: env.IA_TETO_CHAMADAS_DIA });
 
 const log = (job: string, dados: object) => console.log(JSON.stringify({ job, at: new Date().toISOString(), ...dados }));
 
@@ -152,19 +157,12 @@ await tarefa("riscos", "*/10 * * * *", () => vigiarRiscos(db), false);
 
 // Erros do sistema (E09): aviso a quem administra e conferência do backup.
 await tarefa("alertas-erros", "*/5 * * * *", () => avisarErros(db), false);
+// Painel de saúde (E20): o worker e o status do backup, para Administração → Saúde.
+await tarefa("saude", "*/5 * * * *", () => registrarSaude(db, env.OPERACAO_STATUS === "ligado" ? env.OPERACAO_STATUS_DIR : null));
 if (env.OPERACAO_STATUS === "ligado") {
   await tarefa("saude-operacao", "35 * * * *", () => conferirOperacao(db, env.OPERACAO_STATUS_DIR));
 } else {
   console.warn("[worker] OPERACAO_STATUS desligado: o status do backup não é conferido");
-}
-// Retenção por tipo de dado (0066): todo dia às 03:40; prazos na função app.aplicar_retencao.
-if (env.RETENCAO !== "desligada") {
-  await tarefa(
-    "retencao",
-    "40 3 * * *",
-    async () => (await db.execute<{ r: Record<string, unknown> }>(sql`SELECT app.aplicar_retencao(${env.RETENCAO === "real"}) AS r`)).rows[0]?.r ?? {},
-    false,
-  );
 }
 await tarefa(
   "ia-desvios",
@@ -258,19 +256,26 @@ if (env.GRAPH_TENANT_ID && env.GRAPH_CLIENT_ID && env.GRAPH_PRIVATE_KEY_PATH && 
   if (appLogin) await tarefa("entra-pessoas", "12 * * * *", () => sincronizarPessoasDoEntra(db, graph, appLogin));
   else console.warn("[worker] ENTRA_CLIENT_ID não definido: a lista de Pessoas não é lida do Entra");
   if (env.IA_ASSINATURAS === "ligada" && env.OPENAI_API_KEY) {
-    const llmAssinaturas = new OpenAiClient({ apiKey: env.OPENAI_API_KEY });
+    const llmAssinaturas = openAiComTeto(env.OPENAI_API_KEY, tetoIa);
     const ler = async (caixa: string, id: string) => (await graph.mensagem(caixa, id)).body?.content ?? null;
     await tarefa("ia-assinaturas", "7,37 * * * *", () => lerAssinaturas(db, ler, llmAssinaturas, { modelo: env.OPENAI_MODEL }));
   }
   // Caixa única: o telefone conferido na assinatura liga o e-mail ao WhatsApp do contato.
   await tarefa("agenda-assinaturas", "17,47 * * * *", () => vincularPelasAssinaturas(db));
-  const llmReunioes = env.IA_RESUMO_REUNIAO === "ligada" && env.OPENAI_API_KEY ? new OpenAiClient({ apiKey: env.OPENAI_API_KEY }) : null;
+  const llmReunioes = env.IA_RESUMO_REUNIAO === "ligada" && env.OPENAI_API_KEY ? openAiComTeto(env.OPENAI_API_KEY, tetoIa) : null;
   await tarefa("teams-reunioes", "3,18,33,48 * * * *", async () => ({
     agenda: await syncReunioes(db, graph),
     resumos: await resumirReunioes(db, graph, llmReunioes, await carregarCalendario(db, env.TZ_EMPRESA), { modelo: env.OPENAI_MODEL }),
   }));
 } else {
   console.warn("[worker] Graph não configurado (GRAPH_*): e-mails das missões desligados");
+}
+
+// Retenção por tipo de dado (0066, 0081): todo dia às 03:40; prazos em app.aplicar_retencao. Com
+// RETENCAO=real, os arquivos vencidos no SharePoint são apagados de vez (operacao/retencao.ts).
+const modoRetencao = env.RETENCAO;
+if (modoRetencao !== "desligada") {
+  await tarefa("retencao", "40 3 * * *", () => aplicarRetencao(db, modoRetencao, graphGeral), false);
 }
 
 if (env.WHATSAPP_EVOLUTION_URL && env.WHATSAPP_EVOLUTION_KEY) {
@@ -283,7 +288,7 @@ if (env.WHATSAPP_EVOLUTION_URL && env.WHATSAPP_EVOLUTION_KEY) {
 }
 
 // Leitura dos RDOs: as regras do regime rodam sempre; o LLM só com IA_LEITURA_RDO=ligada e a chave.
-const llm = env.IA_LEITURA_RDO === "ligada" && env.OPENAI_API_KEY ? new OpenAiClient({ apiKey: env.OPENAI_API_KEY }) : null;
+const llm = env.IA_LEITURA_RDO === "ligada" && env.OPENAI_API_KEY ? openAiComTeto(env.OPENAI_API_KEY, tetoIa) : null;
 await tarefa(
   "ia-leitura-rdos",
   "0 7 * * 1-6",
@@ -292,7 +297,7 @@ await tarefa(
 );
 
 // Alertas pedidos à IA: a leitura usa o LLM (IA_ALERTAS); os disparos já decididos são publicados sempre.
-const llmAlertas = env.IA_ALERTAS === "ligada" && env.OPENAI_API_KEY ? new OpenAiClient({ apiKey: env.OPENAI_API_KEY }) : null;
+const llmAlertas = env.IA_ALERTAS === "ligada" && env.OPENAI_API_KEY ? openAiComTeto(env.OPENAI_API_KEY, tetoIa) : null;
 await tarefa("ia-alertas", "*/15 * * * *", async () => ({
   conferencia: llmAlertas ? await conferirAlertas(db, llmAlertas, { modelo: env.OPENAI_MODEL }) : "IA_ALERTAS desligada",
   publicacao: await publicarDisparos(db, await carregarCalendario(db, env.TZ_EMPRESA)),
@@ -333,7 +338,7 @@ if (graphGeral && env.GRAPH_ANEXOS_DRIVE_ID && env.CHAMADAS_SERVICO_URL && env.C
 
 // Resumo das ligações gravadas: precisa da IA ligada, da chave da OpenAI e do serviço de voz.
 if (env.IA_RESUMO_CHAMADA === "ligada" && env.OPENAI_API_KEY && env.CHAMADAS_SERVICO_URL && env.CHAMADAS_SERVICO_KEY) {
-  const openai = new OpenAiClient({ apiKey: env.OPENAI_API_KEY });
+  const openai = openAiComTeto(env.OPENAI_API_KEY, tetoIa);
   const doServico = buscarAudioNoServico(env.CHAMADAS_SERVICO_URL, env.CHAMADAS_SERVICO_KEY);
   const sp = graphGeral;
   // Já arquivada: M4A do SharePoint → WAV mono para a transcrição.

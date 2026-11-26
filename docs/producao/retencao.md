@@ -22,22 +22,35 @@
 O restante da auditoria (`audit_log`: perfis, acessos, abertura de e-mails, compartilhamentos)
 **não é apagado** (é só de inserção).
 
-## Para decidir (dados de negócio)
+## Em vigor (dados de negócio, migration 0081)
 
-Sem prazo definido, ficam guardados. Sugestões para levar ao encarregado de dados:
+Decididos em 26/11/2026 (E15). Missão **encerrada** = inativa; os 5 anos contam da primeira data que
+houver: ciclo fechado (`cycle_closed_at`), missão fechada (`closed_at`) ou inativação (`inativada_em`,
+0083). O filtroAPP só manda o status das ativas, então a inativação é a data que quase sempre existe;
+as que já estavam inativas em 26/11/2026 receberam a última atualização vinda do filtroAPP.
 
-| Dado | Sugestão |
-|---|---|
-| Mensagens do Interno e do Gerencial (e arquivos no SharePoint) | 5 anos depois do encerramento da missão (garantia/obra) |
-| Conversas do WhatsApp no banco do Omni (mensagens recebidas ao vivo) | 5 anos; histórico do aparelho some ao sair |
-| E-mails ligados a missões (cabeçalho, prévia, motivo) | 5 anos depois do encerramento da missão |
-| E-mails enviados pelo Omni (`mail_outbox`, com o corpo) | 5 anos |
-| Reuniões do Teams (resumo, decisões, pendências) | 5 anos depois do encerramento da missão |
-| Transcrições e resumos das ligações | seguem a gravação (5 anos) |
-| Tarefas concluídas e comentários | manter (como no Foco) |
+| Dado | Prazo | Como |
+|---|---|---|
+| Mensagens do Interno e do Gerencial, com os arquivos no SharePoint | 5 anos depois do encerramento da missão | apaga; arquivos apagados de vez pelo worker |
+| Perguntas da IA da missão (e os desvios e descargas que geraram) | 5 anos depois do encerramento da missão | apaga (a verdade de desvios e descargas fica no filtroAPP) |
+| E-mails ligados a missões (cabeçalho, prévia, motivo, quem abriu) | 5 anos depois do encerramento de **todas** as missões ligadas; sem ligação, 5 anos do recebimento | apaga |
+| Reuniões do Teams (resumo, decisões, pendências) | igual aos e-mails | apaga |
+| Mensagens do WhatsApp guardadas no Omni | 5 anos | apaga |
+| E-mails e mensagens enviados pelo Omni (`mail_outbox`, `whatsapp_outbox`) | 5 anos | apaga |
+| Cabeçalhos da caixa pessoal (caixa única, `mail_items`) | 1 ano depois da janela de 90 dias (455 dias) | apaga |
+| Tarefas pessoais (caixa própria, fora de projeto) e anexos | 2 anos depois da desativação da pessoa (`people.deactivated_at`, marcado por gatilho) | apaga; anexos apagados de vez pelo worker |
+| Transcrições e resumos das ligações | seguem a gravação (5 anos) | já em vigor |
+| Tarefas de projetos, comentários e histórico | mantidos (são do projeto) | — |
 
-## Antes de ligar `RETENCAO=real` na produção
+**Arquivos no SharePoint:** a função não apaga direto. Ela põe o drive e o item de cada arquivo
+vencido em `arquivos_para_apagar`, na mesma transação, e o job `retencao` apaga de vez
+(`apps/worker/src/operacao/retencao.ts`). O que falhar tenta de novo na noite seguinte; depois de
+5 tentativas o job falha e vira erro do sistema (Administração → Erros).
 
-1. Deixar alguns dias em `ensaio` e conferir no log do worker as contagens (`"job":"retencao"`).
-2. Ter o backup do Omni funcionando (hoje não há: ver `PLANEJAMENTO.md`, situação de 16/11/2026).
-3. Trocar no `.env.production` e subir de novo o worker.
+## Ligar `RETENCAO=real` na produção
+
+1. Com a versão da 0081 no ar, conferir as contagens do ensaio na VPS:
+   `docker exec omni-postgres-1 psql -U omni_owner -d omni -c "SELECT jsonb_pretty(app.aplicar_retencao(false))"`
+   (ensaio não muda nada). O log do worker também mostra o resultado das 03:40 (`"job":"retencao"`).
+2. Backup no B2 funcionando (em vigor desde 25/11/2026, `docs/producao/backup.md`).
+3. Trocar `RETENCAO=real` no `deploy/.env.production` e publicar (`deploy/publicar.sh producao`).

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { MetaFiltroApp } from "@omni/core";
 import {
   bigint,
+  bigserial,
   boolean,
   customType,
   date,
@@ -59,6 +60,9 @@ export const people = pgTable("people", {
   inativoPor: text("inativo_por", { enum: ["entra", "admin"] }),
   /** Como entra (0078): conta Microsoft da empresa ou login interno (usuário e senha). */
   acesso: text("acesso", { enum: ["microsoft", "interno"] }).notNull().default("microsoft"),
+
+  /** 0081: quando foi desativada (gatilho); as tarefas pessoais vencem 2 anos depois. */
+  deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
 });
 
 export const personProfiles = pgTable(
@@ -113,6 +117,8 @@ export const auditLog = pgTable("audit_log", {
 
 /** Espelho de leitura do filtroAPP (0002). Só o worker escreve. */
 export const missions = pgTable("missions", {
+  /** 0083: quando ficou inativa (gatilho); a retenção conta daqui se não houver data de encerramento. */
+  inativadaEm: timestamp("inativada_em", { withTimezone: true }),
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
   filtroappProjectId: text("filtroapp_project_id").notNull().unique(),
@@ -1537,4 +1543,44 @@ export const systemErrors = pgTable("system_errors", {
   alertedAt: timestamp("alerted_at", { withTimezone: true }),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   reviewedBy: uuid("reviewed_by").references(() => people.id),
+});
+
+// ---------------------------------------------------------------- 0081: retenção dos dados de negócio
+
+/** Arquivos do SharePoint (canais e tarefas) que a retenção venceu; o worker apaga de vez. */
+export const arquivosParaApagar = pgTable("arquivos_para_apagar", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  spDriveId: text("sp_drive_id").notNull(),
+  spItemId: text("sp_item_id").notNull(),
+  origem: text("origem", { enum: ["canal", "tarefa"] }).notNull(),
+  tentativas: integer("tentativas").notNull().default(0),
+  ultimoErro: text("ultimo_erro"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------- 0084: desempenho (E19)
+
+/** Tempo por rota, somado por hora (o web grava por app.registrar_desempenho; só admin lê). */
+export const desempenhoRotas = pgTable(
+  "desempenho_rotas",
+  {
+    hora: timestamp("hora", { withTimezone: true }).notNull(),
+    rota: text("rota").notNull(),
+    n: integer("n").notNull(),
+    somaMs: bigint("soma_ms", { mode: "number" }).notNull(),
+    maxMs: integer("max_ms").notNull(),
+    erros: integer("erros").notNull().default(0),
+    /** Contagem por faixa: até 50, 100, 250, 500, 1000, 2500, 5000 ms e acima. */
+    faixas: integer("faixas").array().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.hora, t.rota] })],
+);
+
+// ---------------------------------------------------------------- 0085: painel de saúde (E20)
+
+/** Resumo que o worker grava a cada 5 min (ele mesmo e o status do backup); só admin lê. */
+export const estadoOperacao = pgTable("estado_operacao", {
+  chave: text("chave", { enum: ["worker", "backup"] }).primaryKey(),
+  valor: jsonb("valor").$type<Record<string, unknown>>().notNull(),
+  atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
 });

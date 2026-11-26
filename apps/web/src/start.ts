@@ -1,9 +1,12 @@
 import { isNotFound, isRedirect } from "@tanstack/react-router";
 import { createMiddleware, createStart } from "@tanstack/react-start";
+import { getRequest, setResponseHeader, setResponseStatus } from "@tanstack/react-start/server";
 import { ZodError } from "zod";
 
 import { ErroParaTela } from "./lib/erros.ts";
+import { medirFuncao } from "./server/desempenho.ts";
 import { registrarErroDoWeb } from "./server/erros.ts";
+import { limitarFuncao } from "./server/limites.ts";
 
 /**
  * Toda server function passa por aqui. Erros para a tela (ErroParaTela) e
@@ -12,9 +15,22 @@ import { registrarErroDoWeb } from "./server/erros.ts";
  * sistema (Administração → Erros, com aviso a quem administra).
  */
 const errosSeguros = createMiddleware({ type: "function" }).server(async ({ next, serverFnMeta }) => {
+  // Ações caras (IA, envio de mensagens, Prisma, chaves): limite por pessoa (E10).
+  const esperar = limitarFuncao(serverFnMeta?.name, getRequest());
+  if (esperar) {
+    setResponseStatus(429);
+    setResponseHeader("Retry-After", String(esperar));
+    throw new ErroParaTela(`Muitas tentativas seguidas. Aguarde ${esperar} segundos e tente de novo.`);
+  }
+  const inicio = performance.now();
   try {
-    return await next();
+    const r = await next();
+    medirFuncao(serverFnMeta?.name, performance.now() - inicio, false);
+    return r;
   } catch (error) {
+    // Tempo por função (E19): só o erro inesperado conta como erro.
+    const esperado = error instanceof ErroParaTela || isRedirect(error) || isNotFound(error) || error instanceof ZodError;
+    medirFuncao(serverFnMeta?.name, performance.now() - inicio, !esperado);
     if (error instanceof ErroParaTela || isRedirect(error) || isNotFound(error)) throw error;
     if (error instanceof ZodError) throw new ErroParaTela(error.issues[0]?.message ?? "Confira os dados e tente de novo.");
     const causa = (error as { cause?: { message?: string; code?: string } }).cause;

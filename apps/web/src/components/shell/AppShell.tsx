@@ -1,4 +1,4 @@
-import { BellRing, ChartColumn, Inbox, KeyRound, ListChecks, LogOut, type LucideIcon, Mail, MessageCircle, Moon, Phone, Search, Settings, ShieldCheck, Smartphone, Sun, Target, Users } from "lucide-react";
+import { BellRing, ChartColumn, Download, Inbox, KeyRound, ListChecks, LogOut, type LucideIcon, Mail, MessageCircle, Moon, Phone, Search, Settings, ShieldCheck, Smartphone, Sun, Target, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -405,6 +405,12 @@ export function AppShell({ me }: { me: Me }) {
               <Link to="/termos" className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-superficie-2">
                 <ShieldCheck size={16} /> Termo de uso e privacidade
               </Link>
+              {!semAcesso && (
+                // Download direto (rota de servidor), sem navegar: LGPD art. 18, II (E15).
+                <a href="/api/meus-dados" download className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-superficie-2">
+                  <Download size={16} /> Baixar meus dados
+                </a>
+              )}
               <form
                 method="post"
                 action="/auth/sair"
