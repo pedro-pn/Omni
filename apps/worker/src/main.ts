@@ -40,6 +40,7 @@ import { vincularPelasAssinaturas } from "./contatos/assinaturas.ts";
 import { enviarAvisosPorEmail, enviarResumoSemanal, type EnviarEmail } from "./tarefas/emails.ts";
 import { vigiarRiscos } from "./seguranca/riscos.ts";
 import { aplicarRetencao } from "./operacao/retencao.ts";
+import { registrarSaude } from "./operacao/saude.ts";
 import { avisarErros, conferirOperacao, registrarErroDoWorker } from "./operacao/erros.ts";
 import { conferidorDoTeto, openAiComTeto } from "./operacao/teto-ia.ts";
 
@@ -69,6 +70,7 @@ import { conferidorDoTeto, openAiComTeto } from "./operacao/teto-ia.ts";
  *   retencao           03:40   retenção por tipo de dado (RETENCAO: ensaio só conta, real apaga e apaga de vez no SharePoint os arquivos vencidos)
  *   riscos             10 min  alertas de risco: download em massa e arquivos enviados para fora (Administração e diretoria)
  *   alertas-erros       5 min  erros do sistema novos (ou que voltaram depois de 6 h) → aviso no sino e no celular de quem é admin
+ *   saude               5 min  painel de saúde: versão e memória do worker e o status do backup (Administração → Saúde)
  *   saude-operacao      1 h    status do backup e do ensaio de restauração (OPERACAO_STATUS=ligado) → erro do sistema se passar do limite
  *   whatsapp-recuperar 10 min  relê as últimas 2 h na Evolution e grava o que o webhook perdeu
  *   whatsapp-perfis    30 min  nome dos grupos e endereço da foto das conversas (lista da Evolution)
@@ -155,6 +157,8 @@ await tarefa("riscos", "*/10 * * * *", () => vigiarRiscos(db), false);
 
 // Erros do sistema (E09): aviso a quem administra e conferência do backup.
 await tarefa("alertas-erros", "*/5 * * * *", () => avisarErros(db), false);
+// Painel de saúde (E20): o worker e o status do backup, para Administração → Saúde.
+await tarefa("saude", "*/5 * * * *", () => registrarSaude(db, env.OPERACAO_STATUS === "ligado" ? env.OPERACAO_STATUS_DIR : null));
 if (env.OPERACAO_STATUS === "ligado") {
   await tarefa("saude-operacao", "35 * * * *", () => conferirOperacao(db, env.OPERACAO_STATUS_DIR));
 } else {

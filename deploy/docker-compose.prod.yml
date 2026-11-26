@@ -41,8 +41,17 @@ x-db-urls: &db-urls
   DATABASE_URL_APP: postgres://omni_app:${OMNI_APP_PASSWORD}@postgres:5432/omni
   DATABASE_URL_WORKER: postgres://omni_worker:${OMNI_WORKER_PASSWORD}@postgres:5432/omni
 
+# Rotação dos logs (E20): até 5 arquivos de 20 MB por contêiner, para não encher o disco. Os logs
+# do web, do worker e do Postgres também vão ao Grafana Cloud (deploy/logs, docs/producao/logs.md).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
+    logging: *logging
     image: postgres:16-alpine
     # Desempenho (E19): estatística das consultas (pg_stat_statements, sem os valores) e log das que
     # passam de 500 ms, sem os parâmetros (podem ter dado pessoal). docs/producao/desempenho.md.
@@ -79,6 +88,7 @@ services:
     networks: [interna]
 
   migrate:
+    logging: *logging
     build: { context: .., target: migrate }
     environment:
       DATABASE_URL_OWNER: postgres://omni_owner:${OMNI_OWNER_PASSWORD}@postgres:5432/omni
@@ -88,6 +98,7 @@ services:
     networks: [interna]
 
   web:
+    logging: *logging
     build: { context: .., target: web, args: { OMNI_VERSAO: "${OMNI_VERSAO:-desconhecida}" } }
     restart: unless-stopped
     environment:
@@ -143,6 +154,7 @@ services:
     networks: [interna]
 
   worker:
+    logging: *logging
     build: { context: .., target: worker, args: { OMNI_VERSAO: "${OMNI_VERSAO:-desconhecida}" } }
     restart: unless-stopped
     environment:
@@ -215,6 +227,7 @@ services:
   # Evolution chama o webhook em http://web:3000 pela rede interna. O painel da
   # Evolution não é usado (pareamento pela Administração do Omni).
   evolution:
+    logging: *logging
     profiles: [whatsapp]
     # Mesmo patch de presença + a ponte das chamadas (inerte sem OMNI_CHAMADA_PONTE).
     build:
@@ -289,6 +302,7 @@ services:
   # do áudio do navegador (8099, apenas /omni/audio) é publicada para o Caddy.
   # Gravações no volume chamadas_data (backup em deploy/backup.sh).
   voz:
+    logging: *logging
     profiles: [chamadas]
     build: ../experiments/whatsapp-chamada
     image: omni-chamadas-voz:1
@@ -326,6 +340,7 @@ services:
     networks: [interna]
 
   evolution-postgres:
+    logging: *logging
     profiles: [whatsapp]
     image: postgres:16-alpine
     restart: unless-stopped
@@ -344,6 +359,7 @@ services:
     networks: [whatsapp-dados]
 
   evolution-redis:
+    logging: *logging
     profiles: [whatsapp]
     image: redis:7-alpine
     restart: unless-stopped

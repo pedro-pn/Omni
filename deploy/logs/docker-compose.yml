@@ -1,0 +1,58 @@
+name: omni-logs
+
+# Logs centralizados do Omni (E20, pilar 12.2): a saída dos contêineres da produção e do staging vai
+# ao Grafana Cloud (o mesmo do filtroAPP), já mascarada. Projeto separado do app: publicar e voltar
+# versão não recriam o agente. Roda no Docker rootless do usuário omni. Passo a passo: docs/producao/logs.md.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  # Só leitura de contêineres e redes; sem POST, exec ou imagens.
+  docker-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      NETWORKS: "1"
+      POST: "0"
+    volumes:
+      # Socket do Docker rootless do omni (o do root não enxerga estes contêineres).
+      - ${OMNI_DOCKER_SOCK:-/run/user/1003/docker.sock}:/var/run/docker.sock:ro
+    networks: [logs-interna]
+    logging: *logging
+    mem_limit: 64m
+    cpus: 0.1
+    pids_limit: 50
+
+  alloy:
+    image: grafana/alloy:v1.21.3
+    restart: unless-stopped
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=127.0.0.1:12345
+      - /etc/alloy/config.alloy
+    env_file: [.env]
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      # Até onde cada contêiner já foi enviado (reiniciar não reenvia).
+      - alloy_dados:/var/lib/alloy/data
+    depends_on: [docker-proxy]
+    networks: [logs-interna, logs-saida]
+    logging: *logging
+    mem_limit: 256m
+    cpus: 0.25
+    pids_limit: 100
+
+volumes:
+  alloy_dados:
+
+networks:
+  # Sem saída para a internet: só o agente alcança o proxy do Docker.
+  logs-interna:
+    internal: true
+  logs-saida:
