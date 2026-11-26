@@ -27,12 +27,14 @@ export class PonteDeAcoes {
   }
 
   attach(sock) {
-    const linha = { sock, contatos: new Map(), sincronizado: false };
+    const linha = { sock, contatos: new Map(), sincronizado: false, eventos: 0, comNome: 0 };
     this.linhas.set(sock.ws, linha);
     // Só o que vem da agenda (contactAction e o histórico) traz `name`; o nome de perfil vem em `notify`.
     const guardar = (lista) => {
       for (const c of lista ?? []) {
+        linha.eventos += 1;
         if (!c?.id || !Object.prototype.hasOwnProperty.call(c, 'name')) continue;
+        if (c.name) linha.comNome += 1;
         const nome = typeof c.name === 'string' ? c.name.trim().slice(0, 120) : '';
         if (nome && digitos(nome) !== digitos(String(c.id).split('@')[0])) {
           linha.contatos.set(c.id, { jid: c.id, lid: c.lid ?? null, telefone: c.phoneNumber ?? null, nome });
@@ -41,6 +43,8 @@ export class PonteDeAcoes {
     };
     sock.ev.on('contacts.upsert', guardar);
     sock.ev.on('contacts.update', guardar);
+    // Histórico do pareamento: traz os contatos com o nome da agenda.
+    sock.ev.on('messaging-history.set', (h) => guardar(h?.contacts));
     sock.ev.on('connection.update', (u) => {
       if (u.connection === 'close') this.linhas.delete(sock.ws);
     });
@@ -54,14 +58,25 @@ export class PonteDeAcoes {
     return abertas[0];
   }
 
-  /** A agenda inteira: na primeira vez, baixa de novo a coleção dos contatos (snapshot). */
+  /**
+   * A agenda inteira: na primeira vez, baixa de novo a coleção dos contatos (snapshot). O
+   * diagnóstico diz quantos contatos o WhatsApp mandou e se a coleção baixou (versão > 0); o
+   * Baileys não devolve erro quando a coleção falha (só registra no log).
+   */
   async contatos(linha, recarregar = false) {
+    const antes = { eventos: linha.eventos, comNome: linha.comNome };
+    let versao = null;
     if (!linha.sincronizado || recarregar) {
       await linha.sock.authState.keys.set({ 'app-state-sync-version': { critical_unblock_low: null } });
       await linha.sock.resyncAppState(['critical_unblock_low'], true);
+      const v = await linha.sock.authState.keys.get('app-state-sync-version', ['critical_unblock_low']);
+      versao = v?.critical_unblock_low?.version ?? 0;
       linha.sincronizado = true;
     }
-    return [...linha.contatos.values()];
+    return {
+      contatos: [...linha.contatos.values()],
+      diagnostico: { versaoDaColecao: versao, eventosNaLeitura: linha.eventos - antes.eventos, comNomeNaLeitura: linha.comNome - antes.comNome, eventosDesdeOInicio: linha.eventos, salvosEmMemoria: linha.contatos.size },
+    };
   }
 
   async executar(corpo) {
@@ -69,7 +84,7 @@ export class PonteDeAcoes {
     const jid = String(corpo?.jid ?? '');
     switch (corpo?.acao) {
       case 'contatos':
-        return { contatos: await this.contatos(l, corpo.recarregar === true) };
+        return await this.contatos(l, corpo.recarregar === true);
       case 'contato': {
         const nome = String(corpo.nome ?? '').trim().slice(0, 120);
         if (!PESSOA.test(jid) || !nome) throw Object.assign(new Error('dados_invalidos'), { status: 400 });

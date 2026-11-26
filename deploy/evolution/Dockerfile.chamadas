@@ -31,7 +31,7 @@ LABEL com.filtrovali.patch="baileys-partial-credential-presence-1"
 LABEL com.filtrovali.patch-contatos="evolution-contact-names-1"
 LABEL com.filtrovali.patch-lid="evolution-lid-mapping-1"
 LABEL com.filtrovali.ponte="chamadas-omni-producao-1"
-LABEL com.filtrovali.ponte-acoes="acoes-omni-1"
+LABEL com.filtrovali.ponte-acoes="acoes-omni-2"
 LABEL com.filtrovali.app="omni"
 # Travas do Omni: chave geral forte e senha do banco; com a ponte ligada, token forte.
 ENTRYPOINT ["/bin/bash", "-c", "if [ ${#AUTHENTICATION_API_KEY} -lt 32 ]; then echo 'AUTHENTICATION_API_KEY ausente ou curta (mínimo 32)'; exit 1; fi; case \"$DATABASE_CONNECTION_URI\" in *evolution:@*) echo 'senha do banco da Evolution ausente'; exit 1;; esac; if [ -n \"$OMNI_CHAMADA_PONTE\" ] && [ ${#OMNI_CHAMADA_TOKEN} -lt 32 ]; then echo 'OMNI_CHAMADA_TOKEN ausente ou curto (mínimo 32)'; exit 1; fi; if [ -n \"$OMNI_ACOES_TOKEN\" ] && [ ${#OMNI_ACOES_TOKEN} -lt 32 ]; then echo 'OMNI_ACOES_TOKEN curto (mínimo 32)'; exit 1; fi; . ./Docker/scripts/deploy_database.sh && npm run start:prod"]

@@ -94,7 +94,7 @@ Mensagens de pessoa e de grupo chegaram em tempo real; a foto do grupo abriu pel
 
 ## Ponte de ações do Omni (agenda do celular, adicionar contato, fixar e favoritar)
 
-A Evolution 2.3.7 não expõe em rota o que o WhatsApp Web faz com a agenda e com o fixar/favoritar. A ponte de ações (`experiments/whatsapp-chamada/evolution-bridge/acoes.mjs`, instalada dentro do Baileys da imagem `omni-evolution:2.3.7-chamadas.2`) faz isso pelo próprio socket, só na rede interna, com token:
+A Evolution 2.3.7 não expõe em rota o que o WhatsApp Web faz com a agenda e com o fixar/favoritar. A ponte de ações (`experiments/whatsapp-chamada/evolution-bridge/acoes.mjs`, instalada dentro do Baileys da imagem `omni-evolution:2.3.7-chamadas.3`) faz isso pelo próprio socket, só na rede interna, com token:
 
 - **Agenda:** os contatos **salvos** no celular, com o nome salvo (não o nome de perfil). Na primeira leitura de cada sessão, baixa de novo a coleção dos contatos do WhatsApp (`critical_unblock_low`). O worker lê a cada 6 h (`whatsapp-agenda`, tabela `whatsapp_contacts`, migration 0088). Com a agenda lida, quem não está salvo aparece pelo número e o nome de perfil fica discreto ("~ Nome"), como no WhatsApp Web.
 - **Adicionar contato** (cabeçalho da conversa e menu da mensagem no grupo): salva na agenda do celular, e por ela em todos os aparelhos.
