@@ -63,7 +63,8 @@ export const LIMITES_FUNCOES: Record<string, RegraDeLimite[]> = {
   enviarMensagemWhatsApp: [{ nome: "whatsapp-envio", max: 30, janelaMs: MIN }],
   enviarEmailDaMissao: [{ nome: "email-envio", max: 10, janelaMs: MIN }],
   enviarDaMinhaCaixa: [{ nome: "email-envio", max: 10, janelaMs: MIN }],
-  conectarMeuWhatsApp: [{ nome: "whatsapp-conectar", max: 5, janelaMs: MIN }],
+  // A tela renova o QR code a cada 5 s (12/min) enquanto o celular não lê: o limite cobre isso com folga.
+  conectarMeuWhatsApp: [{ nome: "whatsapp-conectar", max: 20, janelaMs: MIN }, { nome: "whatsapp-conectar-hora", max: 300, janelaMs: HORA }],
   // Prisma (escreve no CRM em nome de quem clicou)
   registrarNoPrisma: [{ nome: "prisma-escrita", max: 30, janelaMs: MIN }],
   registrarNoPrismaEmLote: [{ nome: "prisma-lote", max: 5, janelaMs: MIN }],

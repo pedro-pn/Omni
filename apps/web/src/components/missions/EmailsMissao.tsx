@@ -16,6 +16,7 @@ import {
   type EmailAberto,
   type EmailResumo,
 } from "../../lib/emails-fns.ts";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Aba E-mails da missão (Fase 4; INSTRUCOES §6.9): e-mails das caixas
@@ -153,7 +154,7 @@ export function Escrever({
       void queryClient.invalidateQueries({ queryKey: ["emails", "contexto-envio"] });
     },
   });
-  if (ctx.isPending) return <p className="text-sm text-muted">Carregando…</p>;
+  if (ctx.isPending) return <Carregando />;
   if (ctx.isError) return <p className="text-sm text-vermelho">Não foi possível preparar o envio.</p>;
   if (!ctx.data.caixa) {
     return (
@@ -599,7 +600,7 @@ export function EmailsDaMissao({ missionId, missionCode, podeComentar }: { missi
       setMarcadas(new Set());
     },
   });
-  if (q.isPending) return <p className="p-5 text-sm text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError) return <p className="p-5 text-sm text-vermelho">Não foi possível carregar os e-mails da missão.</p>;
   if (!q.data.podeVer) return <p className="p-5 text-sm text-muted">Os e-mails da missão são para a diretoria e os gerentes.</p>;
   // Sugestões: participantes dos e-mails da missão e pessoas da empresa.

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { RegistrarNoPrisma } from "../prisma/NoPrisma.tsx";
 import { pedirResumoChamada, pendenciaDaChamadaParaTarefa, transcricaoDaChamada, type ResumoChamada as Resumo } from "../../lib/chamadas-fns.ts";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /** Transcrição guardada da ligação (0062): carrega só quando abre (pode ser longa). */
 function Transcricao({ callId }: { callId: string }) {
@@ -17,7 +18,7 @@ function Transcricao({ callId }: { callId: string }) {
       </button>
       {aberta && (
         <div className="mt-1.5 rounded-md border border-linha bg-superficie p-2">
-          {q.isPending && <p className="text-xs text-muted">Carregando…</p>}
+          {q.isPending && <Carregando tamanho="sm" />}
           {q.isError && <p className="text-xs text-vermelho">Não foi possível carregar a transcrição.</p>}
           {q.data && (
             <>

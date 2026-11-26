@@ -3,6 +3,7 @@ import { Check, Download, Send, ShieldCheck } from "lucide-react";
 
 import { alertasDeRisco, marcarAlertaVisto } from "../../lib/seguranca-fns.ts";
 import { Aviso, botaoSecundario, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const ORIGEM: Record<string, string> = {
   sharepoint: "pastas do SharePoint",
@@ -26,7 +27,7 @@ export function Seguranca() {
     mutationFn: (id: string) => marcarAlertaVisto({ data: { id } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["admin", "riscos"] }),
   });
-  if (q.isPending) return <p className="text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando />;
   if (q.isError) return <Aviso tipo="erro">{mensagemDeErro(q.error)}</Aviso>;
   const { alertas, limites } = q.data;
   const abertos = alertas.filter((a) => !a.vistoEm).length;

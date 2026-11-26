@@ -5,6 +5,7 @@ import { useState } from "react";
 import { criarAcessoInterno, definirAtivo, definirPerfis, listPessoas, novoLinkDeSenha, type PessoaAdmin } from "../../lib/admin-fns.ts";
 import { definirPermissaoGravacao } from "../../lib/whatsapp-fns.ts";
 import { Aviso, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const ultimoAcesso = (iso: string | null) =>
   iso
@@ -46,7 +47,7 @@ export function Pessoas({ meuId, souAdmin }: { meuId: string; souAdmin: boolean 
     onSettled: atualizar,
   });
 
-  if (pessoas.isPending) return <p className="text-muted">Carregando pessoas…</p>;
+  if (pessoas.isPending) return <Carregando rotulo="Carregando pessoas" />;
   if (pessoas.isError) return <Aviso tipo="erro">{mensagemDeErro(pessoas.error)}</Aviso>;
 
   const termo = busca.trim().toLowerCase();

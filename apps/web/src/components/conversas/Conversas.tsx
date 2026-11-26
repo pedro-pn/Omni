@@ -110,6 +110,7 @@ import {
   useDetalhesDaConversa,
 } from "./AcoesDaMensagem.tsx";
 import { useListaProgressiva } from "../comum/ListaProgressiva.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Conversas do WhatsApp (Fase 7). As conversas e as mensagens vêm do webhook da
@@ -457,7 +458,7 @@ function NovaConversa({ numberId, fechar, onAberta }: { numberId: string; fechar
                 </ul>
               </section>
             ))}
-            {contatos.isPending && <p className="px-2 py-3 text-sm text-muted">Carregando os contatos…</p>}
+            {contatos.isPending && <Carregando rotulo="Carregando os contatos" className="px-2 py-3" />}
             {contatos.isError && <p className="px-2 py-3 text-sm text-vermelho">Não foi possível carregar os contatos. Ainda dá para digitar um número.</p>}
             {contatos.data && !grupos.total && !numero && <p className="px-2 py-3 text-sm text-muted">Nenhum contato com esse nome. Digite o número.</p>}
           </div>
@@ -1224,7 +1225,7 @@ export function PainelConversa({
       <>
       <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={rolagem.caixa} onScroll={rolagem.aoRolar} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-5" style={estiloDoFundo(fundo)}>
-        {q.isPending && <p className="text-center text-muted">Carregando…</p>}
+        {q.isPending && <Carregando />}
         {q.isError && (
           <p className="text-center text-vermelho">
             Não foi possível carregar a conversa.
@@ -1281,7 +1282,7 @@ export function PainelConversa({
 
 /** Aba Ligações da conversa: as ligações com este contato, com gravação, resumo e transcrição. */
 function LigacoesDaConversa({ conversa, q }: { conversa: ConversaResumo; q: ReturnType<typeof useLigacoesDaConversa> }) {
-  if (q.isPending) return <p className="p-5 text-center text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError) return <FalhaAoCarregar mensagem="Não foi possível carregar as ligações." consulta={q} />;
   if (!q.data.ligacoes.length)
     return (
@@ -1681,7 +1682,7 @@ export function useWhatsAppDaMissao(missionId: string) {
 export function WhatsAppDaMissao({ missionId }: { missionId: string }) {
   const q = useWhatsAppDaMissao(missionId);
   const [aberta, setAberta] = useState<string | null>(null);
-  if (q.isPending) return <p className="p-5 text-sm text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError)
     return (
       <p className="p-5 text-sm text-vermelho">

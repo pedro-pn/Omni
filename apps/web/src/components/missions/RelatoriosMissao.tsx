@@ -5,6 +5,7 @@ import { useState } from "react";
 import { enviarMensagem } from "../../lib/canais-fns.ts";
 import { listarRelatoriosDaMissao, type RelatorioDaMissao, type SituacaoRelatorio } from "../../lib/relatorios-fns.ts";
 import { FalhaAoCarregar } from "../comum/TentarDeNovo.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /** Abas RDOs e Relatórios técnicos da missão (INSTRUCOES §6.10). Dados do filtroAPP, só leitura. */
 
@@ -50,7 +51,7 @@ export function useRelatoriosDaMissao(missionId: string) {
 }
 
 function Estado({ q, vazio }: { q: ReturnType<typeof useRelatoriosDaMissao>; vazio?: string }) {
-  if (q.isPending) return <p className="p-5 text-sm text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError) return <FalhaAoCarregar mensagem="Não foi possível carregar os relatórios da missão." consulta={q} />;
   return vazio ? <p className="p-5 text-sm text-muted">{vazio}</p> : null;
 }

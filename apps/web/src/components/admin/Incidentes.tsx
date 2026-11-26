@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 
 import { incidentes, salvarIncidente, type IncidenteNaTela, type IncidenteParaSalvar } from "../../lib/incidentes-fns.ts";
 import { Aviso, botaoPrimario, botaoSecundario, campo, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const quando = (iso: string | null) =>
   iso
@@ -219,7 +220,7 @@ function Texto({ rotulo, valor }: { rotulo: string; valor: string | null }) {
 export function Incidentes() {
   const q = useQuery({ queryKey: ["admin", "incidentes"], queryFn: () => incidentes() });
   const [editando, setEditando] = useState<Form | null>(null);
-  if (q.isPending) return <p className="text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando />;
   if (q.isError) return <Aviso tipo="erro">{mensagemDeErro(q.error)}</Aviso>;
   const lista = q.data;
   const abertos = lista.filter((i) => i.status !== "encerrado").length;

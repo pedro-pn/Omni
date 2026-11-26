@@ -61,6 +61,7 @@ import {
   useAbaOrganizacao,
   useOrganizacao,
 } from "../organizacao/Organizacao.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const dataCurta = (iso: string | null) =>
   iso
@@ -727,7 +728,7 @@ function Responsaveis({ missionId }: { missionId: string }) {
     queryFn: () => listResponsaveis({ data: { missionId } }),
   });
   if (responsaveis.isPending)
-    return <p className="text-sm text-muted">Carregando responsáveis…</p>;
+    return <Carregando rotulo="Carregando responsáveis" />;
   if (responsaveis.isError)
     return (
       <p className="text-sm text-vermelho">

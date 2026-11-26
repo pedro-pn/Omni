@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import { adicionarFeriado, listFeriados, removerFeriado } from "../../lib/admin-fns.ts";
 import { Aviso, botaoPrimario, botaoSecundario, campo, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const ESCOPO = { nacional: "Nacional", municipal: "Municipal", empresa: "Empresa" } as const;
 const dataBr = (iso: string) =>
@@ -88,7 +89,7 @@ export function Feriados() {
         </button>
       </div>
 
-      {feriados.isPending && <p className="text-muted">Carregando feriados…</p>}
+      {feriados.isPending && <Carregando rotulo="Carregando feriados" />}
       {feriados.isError && <Aviso tipo="erro">{mensagemDeErro(feriados.error)}</Aviso>}
       {feriados.data && (
         <ul className="divide-y divide-linha rounded-lg border border-linha bg-superficie">

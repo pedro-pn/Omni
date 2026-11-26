@@ -7,6 +7,7 @@ import { acaoChamada, painelChamadas, type PainelChamadas } from "../../lib/cham
 import { ItemDeLigacao } from "./ItemDeLigacao.tsx";
 import { saidaComEcoCancelado, type SaidaDeAudio } from "./saida-com-eco-cancelado.ts";
 import type { EstadoChamada } from "../../server/chamadas.ts";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Chamadas pelo WhatsApp do próprio usuário (docs/integracoes/chamadas-omni.md).
@@ -543,7 +544,7 @@ export function Chamadas({
               <X size={18} />
             </button>
           </header>
-          {painel.isPending && <p>Carregando chamadas…</p>}
+          {painel.isPending && <Carregando rotulo="Carregando chamadas" />}
           {painel.isError && <p role="alert">Não foi possível carregar suas chamadas.</p>}
           {erro && (
             <p role="alert" className="text-vermelho">

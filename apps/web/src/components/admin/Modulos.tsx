@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { configuracaoDosModulos, salvarModulo, type ConfigModulo } from "../../lib/modulos-fns.ts";
 import { Aviso, botaoPrimario, botaoSecundario, campo, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Liberação por módulo (Fase 11): cada módulo vale para todos, só para alguns perfis e
@@ -11,7 +12,7 @@ import { Aviso, botaoPrimario, botaoSecundario, campo, mensagemDeErro } from "./
  */
 export function Modulos() {
   const q = useQuery({ queryKey: ["admin", "modulos"], queryFn: () => configuracaoDosModulos() });
-  if (q.isPending) return <p className="text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando />;
   if (q.isError) return <Aviso tipo="erro">{mensagemDeErro(q.error)}</Aviso>;
   return (
     <div className="space-y-4">

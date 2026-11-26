@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 
 import { getGestaoMissao, type GestaoMissao, type SemanaGestao } from "../../lib/gestao-fns.ts";
 import { FalhaAoCarregar } from "../comum/TentarDeNovo.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Aba Gestão da missão: avanço semana a semana, custo × avanço (só gerente e
@@ -506,7 +507,7 @@ function Desvios({ desvios }: { desvios: GestaoMissao["desvios"] }) {
 
 export function GestaoDaMissao({ missionId }: { missionId: string }) {
   const q = useGestaoMissao(missionId);
-  if (q.isPending) return <p className="p-5 text-sm text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError) return <FalhaAoCarregar mensagem="Não foi possível carregar a gestão da missão." consulta={q} />;
   const d = q.data;
   if (!d.podeVer) return <p className="p-5 text-sm text-muted">A gestão da missão é para gerentes, diretoria e quem participa do Interno.</p>;

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { abrirPasta, listarArquivosDaMissao, type PastaVinculada } from "../../lib/arquivos-fns.ts";
 import { FalhaAoCarregar } from "../comum/TentarDeNovo.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Aba Arquivos da missão (protótipo: `filesPanelHTML`): as pastas comerciais
@@ -132,7 +133,7 @@ function Navegador({ pasta, onVoltar }: { pasta: PastaVinculada; onVoltar: () =>
 export function ArquivosDaMissao({ missionId }: { missionId: string }) {
   const q = useQuery({ queryKey: ["arquivos", missionId], queryFn: () => listarArquivosDaMissao({ data: { missionId } }) });
   const [aberta, setAberta] = useState<PastaVinculada | null>(null);
-  if (q.isPending) return <p className="p-5 text-sm text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError) return <FalhaAoCarregar mensagem="Não foi possível carregar as pastas da missão." consulta={q} />;
   if (aberta) return <Navegador key={aberta.id} pasta={aberta} onVoltar={() => setAberta(null)} />;
   const { daMissao, doCliente, graphConfigurado } = q.data;

@@ -4,6 +4,7 @@ import { ArrowLeft, Copy, KeyRound } from "lucide-react";
 import { useState } from "react";
 
 import { criarChave, listarChaves, revogarChave } from "../../lib/api-fns.ts";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /** Meu perfil → API e automações: chaves pessoais da API /api/v1 (compatível com o Foco). */
 
@@ -94,7 +95,7 @@ export function ChavesApi() {
 
         <section className="rounded-lg border border-linha bg-superficie p-4">
           <h2 className="font-semibold">Chaves ativas · {ativas.length}</h2>
-          {chaves.isLoading && <p className="mt-2 text-sm text-muted">Carregando…</p>}
+          {chaves.isLoading && <Carregando className="mt-2" />}
           <ul className="mt-2 divide-y divide-linha text-sm">
             {ativas.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">

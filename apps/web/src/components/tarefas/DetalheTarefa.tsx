@@ -20,6 +20,7 @@ import {
 } from "../../lib/tarefas-fns.ts";
 import { AnexosDaTarefa } from "./AnexosDaTarefa.tsx";
 import { dadosDoParser } from "./Tarefas.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /** Abrir a tarefa: editar tudo, subtarefas, comentar (com @menção), ver o histórico e excluir. */
 
@@ -63,7 +64,7 @@ export function DetalheTarefa({ id, ctx, meuId, onFechar }: { id: string; ctx: C
               {erroDe(detalhe.error)}
             </p>
           ) : !detalhe.data ? (
-            <p className="text-muted">Carregando…</p>
+            <Carregando />
           ) : (
             <>
               {detalhe.data.tarefa.pai && (

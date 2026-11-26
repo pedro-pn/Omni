@@ -3,6 +3,7 @@ import { CheckCircle2, ExternalLink, ListPlus, Sparkles, Video } from "lucide-re
 
 import { listarReunioesDaMissao, pendenciaParaTarefa, type Reuniao, type SituacaoTranscricao } from "../../lib/reunioes-fns.ts";
 import { FalhaAoCarregar } from "../comum/TentarDeNovo.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const MOTIVO: Record<string, string> = { numero: "Número da missão", proposta: "Proposta", nf: "Nota fiscal", dominio: "Domínio do cliente" };
 
@@ -30,7 +31,7 @@ export function useReunioesDaMissao(missionId: string) {
 
 export function ReunioesDaMissao({ missionId }: { missionId: string }) {
   const q = useReunioesDaMissao(missionId);
-  if (q.isPending) return <p className="p-5 text-sm text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError) return <FalhaAoCarregar mensagem="Não foi possível carregar as reuniões da missão." consulta={q} />;
   if (!q.data.podeVer) return <p className="p-5 text-sm text-muted">As reuniões da missão são para a diretoria e os gerentes.</p>;
   const agora = Date.now();
