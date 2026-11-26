@@ -1547,3 +1547,12 @@ export const desempenhoRotas = pgTable(
   },
   (t) => [primaryKey({ columns: [t.hora, t.rota] })],
 );
+
+// ---------------------------------------------------------------- 0085: painel de saúde (E20)
+
+/** Resumo que o worker grava a cada 5 min (ele mesmo e o status do backup); só admin lê. */
+export const estadoOperacao = pgTable("estado_operacao", {
+  chave: text("chave", { enum: ["worker", "backup"] }).primaryKey(),
+  valor: jsonb("valor").$type<Record<string, unknown>>().notNull(),
+  atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
+});

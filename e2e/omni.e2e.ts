@@ -148,6 +148,9 @@ describe("Omni de ponta a ponta", () => {
     await adm.page.goto("/admin?aba=desempenho");
     await adm.page.getByRole("heading", { name: "Tempo por rota e ação" }).waitFor();
     await adm.page.getByRole("heading", { name: "Consultas mais lentas no banco" }).waitFor();
+    // Saúde (E20).
+    await adm.page.goto("/admin?aba=saude");
+    await adm.page.getByRole("heading", { name: /Tarefas automáticas/ }).waitFor();
     expect([...op.erros, ...dir.erros, ...adm.erros]).toEqual([]);
   });
 

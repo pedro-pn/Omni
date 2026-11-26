@@ -7,6 +7,7 @@ import { Feriados } from "../components/admin/Feriados.tsx";
 import { Funcoes } from "../components/admin/Funcoes.tsx";
 import { Pessoas } from "../components/admin/Pessoas.tsx";
 import { Desempenho } from "../components/admin/Desempenho.tsx";
+import { Saude } from "../components/admin/Saude.tsx";
 import { ErrosDoSistema } from "../components/admin/ErrosDoSistema.tsx";
 import { Seguranca } from "../components/admin/Seguranca.tsx";
 import { getMe } from "../lib/session-fns.ts";
@@ -19,12 +20,13 @@ const ABAS = [
   { id: "caixas", rotulo: "Caixas de e-mail" },
   { id: "seguranca", rotulo: "Segurança" },
   { id: "erros", rotulo: "Erros" },
+  { id: "saude", rotulo: "Saúde" },
   { id: "desempenho", rotulo: "Desempenho" },
   { id: "modulos", rotulo: "Módulos" },
 ] as const;
 
 export const Route = createFileRoute("/admin")({
-  validateSearch: z.object({ aba: z.enum(["pessoas", "funcoes", "feriados", "caixas", "seguranca", "erros", "desempenho", "modulos"]).catch("pessoas").default("pessoas") }),
+  validateSearch: z.object({ aba: z.enum(["pessoas", "funcoes", "feriados", "caixas", "seguranca", "erros", "saude", "desempenho", "modulos"]).catch("pessoas").default("pessoas") }),
   beforeLoad: async () => {
     const me = await getMe();
     if (!me) throw redirect({ to: "/entrar" });
@@ -52,7 +54,7 @@ function Admin() {
       </header>
       <nav aria-label="Seções da administração" className="border-b border-linha bg-superficie px-4">
         <ul className="flex gap-1">
-          {ABAS.filter((a) => (a.id !== "caixas" && a.id !== "erros" && a.id !== "desempenho") || souAdmin).map((a) => (
+          {ABAS.filter((a) => !["caixas", "erros", "saude", "desempenho"].includes(a.id) || souAdmin).map((a) => (
             <li key={a.id}>
               <Link
                 to="/admin"
@@ -75,6 +77,7 @@ function Admin() {
         {aba === "caixas" && souAdmin && <Caixas />}
         {aba === "seguranca" && <Seguranca />}
         {aba === "erros" && souAdmin && <ErrosDoSistema />}
+        {aba === "saude" && souAdmin && <Saude />}
         {aba === "desempenho" && souAdmin && <Desempenho />}
         {aba === "modulos" && <Modulos />}
       </main>
