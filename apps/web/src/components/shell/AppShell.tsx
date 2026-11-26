@@ -1,7 +1,7 @@
 import { BellRing, ChartColumn, Download, Inbox, KeyRound, ListChecks, LogOut, type LucideIcon, Mail, MessageCircle, Moon, Phone, Search, Settings, ShieldCheck, Smartphone, Sun, Target, Users } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getNaoLidas, novidadesDasMissoes } from "../../lib/canais-fns.ts";
 import { listMissoes } from "../../lib/missions-fns.ts";
@@ -272,7 +272,16 @@ export function AppShell({ me }: { me: Me }) {
   useNaoLidasNoTitulo(conversas.data);
   const correspondentes = useCorrespondentes(naTudo || (view === "conversas" && !semAcesso));
   const agenda = useAgenda(conversas.data, correspondentes.data, (naTudo || view === "conversas") && !semAcesso);
-  const contatosUnicos = juntarContatos(conversas.data ?? [], correspondentes.data ?? [], agenda.data ?? []);
+  // Só recalcula quando os dados mudam: a lista inteira não se redesenha a cada clique.
+  const contatosUnicos = useMemo(() => juntarContatos(conversas.data ?? [], correspondentes.data ?? [], agenda.data ?? []), [conversas.data, correspondentes.data, agenda.data]);
+  const selecionarContato = useCallback((chave: string) => {
+    setCentroEmail(null);
+    setContatoUnico(chave);
+  }, []);
+  const selecionarConversa = useCallback((id: string) => {
+    setCentroEmail(null);
+    setConversaId(id);
+  }, []);
   const unico = naTudo ? acharContato(contatosUnicos, contatoUnico) : null;
   const conversa =
     view === "conversas" ? (conversas.data?.find((c) => c.id === conversaId) ?? null) : naTudo ? (unico?.conversa ?? null) : null;
@@ -482,10 +491,7 @@ export function AppShell({ me }: { me: Me }) {
             carregando={conversas.isPending || correspondentes.isPending}
             falha={conversas.isError ? conversas : correspondentes.isError ? correspondentes : null}
             selecionado={unico?.chave ?? null}
-            onSelecionar={(chave) => {
-              setCentroEmail(null);
-              setContatoUnico(chave);
-            }}
+            onSelecionar={selecionarContato}
             busca={busca}
             missoesComNovidade={missoesComNovidade}
             onAbrirMissao={(id) => abrirMissao(id, "interno")}
@@ -527,10 +533,7 @@ export function AppShell({ me }: { me: Me }) {
           <ListaConversas
             conversas={conversas.data}
             selecionada={conversaId}
-            onSelecionar={(id) => {
-              setCentroEmail(null);
-              setConversaId(id);
-            }}
+            onSelecionar={selecionarConversa}
             busca={busca}
           />
         ) : view === "conversas" && !semAcesso && conversas.isError ? (

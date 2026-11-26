@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { separadorDoDia } from "../../lib/datas-sp.ts";
 import {
   ArrowLeft,
   ListChecks,
@@ -6,9 +7,8 @@ import {
   Mail,
   MessageCircle,
   PenSquare,
-  Users,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+  Users, User } from "lucide-react";
+import { memo, useEffect, useMemo, useState } from "react";
 
 import type { ConversaResumo } from "../../lib/conversas-fns.ts";
 import type { MissaoResumo } from "../../lib/missions-fns.ts";
@@ -37,6 +37,7 @@ import { FalhaAoCarregar } from "../comum/TentarDeNovo.tsx";
 import { FotoConversa, quandoCurto, useMarcarConversaLida } from "../conversas/Conversas.tsx";
 import { CartaoEmail } from "./CartaoEmail.tsx";
 import { VincularContato } from "./Vincular.tsx";
+import { useListaProgressiva } from "../comum/ListaProgressiva.tsx";
 
 /**
  * Caixa única (decisão de 17/11/2026): Conversas, E-mails, Missões e Tarefas numa lista,
@@ -132,7 +133,7 @@ function Avatar({ c }: { c: ContatoUnico }) {
   return (
     <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-azul text-white">
       <span className="text-sm font-semibold">
-        {c.nome.slice(0, 2).toUpperCase()}
+        {/^\p{L}/u.test(c.nome) ? c.nome.slice(0, 2).toUpperCase() : <User size={18} aria-hidden />}
       </span>
     </span>
   );
@@ -204,6 +205,7 @@ export function ListaUnica({
     })),
     ...missoes.map((m) => ({ k: "missao" as const, em: m.ultimaEm ?? "", m })),
   ].sort((a, b) => b.em.localeCompare(a.em));
+  const progressiva = useListaProgressiva(linhas.length, termo);
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       {!termo && <SugestoesDeVinculo contatos={contatos} />}
@@ -251,7 +253,7 @@ export function ListaUnica({
         </p>
       ) : (
         <ul>
-          {linhas.map((l) => {
+          {linhas.slice(0, progressiva.limite).map((l) => {
             if (l.k === "missao") {
               const { missao, dePessoas, daIa, previa } = l.m;
               return (
@@ -309,6 +311,7 @@ export function ListaUnica({
             const c = l.c;
             return <ItemContato key={c.chave} c={c} selecionado={selecionado === c.chave} onSelecionar={onSelecionar} />;
           })}
+          {progressiva.faltam > 0 && <li ref={progressiva.sentinela} className="h-8" aria-hidden />}
         </ul>
       )}
     </div>
@@ -320,7 +323,7 @@ export function ListaUnica({
  * e e-mails não lidos. Lida/não lida pelo botão que aparece ao passar o mouse, pelo botão
  * direito ou deslizando para a direita: marca a conversa e os e-mails do contato.
  */
-function ItemContato({ c, selecionado, onSelecionar }: { c: ContatoUnico; selecionado: boolean; onSelecionar: (chave: string) => void }) {
+const ItemContato = memo(function ItemContato({ c, selecionado, onSelecionar }: { c: ContatoUnico; selecionado: boolean; onSelecionar: (chave: string) => void }) {
   const qc = useQueryClient();
   const marcarConversa = useMarcarConversaLida();
   const conversaNaoLida = Boolean(c.conversa && c.conversa.podeResponder && (c.conversa.naoLidas > 0 || c.conversa.marcadaNaoLida));
@@ -407,7 +410,7 @@ function ItemContato({ c, selecionado, onSelecionar }: { c: ContatoUnico; seleci
       {menu.menu}
     </li>
   );
-}
+});
 
 const TZ = { timeZone: "America/Sao_Paulo" } as const;
 
@@ -501,16 +504,7 @@ export function PainelContatoEmail({
         )}
         {emails.map((e) => {
           const em = new Date(e.em);
-          const outroAno =
-            em.toLocaleDateString("pt-BR", { year: "numeric", ...TZ }) !==
-            new Date().toLocaleDateString("pt-BR", { year: "numeric", ...TZ });
-          const d = em.toLocaleDateString("pt-BR", {
-            weekday: "long",
-            day: "2-digit",
-            month: "2-digit",
-            ...(outroAno ? { year: "numeric" } : {}),
-            ...TZ,
-          });
+          const d = separadorDoDia(em);
           const novoDia = d !== dia;
           dia = d;
           return (
