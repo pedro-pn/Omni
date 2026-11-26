@@ -11,6 +11,7 @@ import { personIdFromRequest } from "../server/session.ts";
 import { enviarPeloWhatsApp } from "../server/whatsapp-envio.ts";
 import { enderecoDoProxy } from "../server/email-imagem.ts";
 import { previaDoEndereco, type PreviaDeLink } from "../server/link-previa.ts";
+import { montarAgenda, nomeDaConversa, nomeDoAutor, type Agenda } from "./nomes-whatsapp.ts";
 import { ErroParaTela } from "./erros.ts";
 import { resumoDaChamada } from "./chamadas-fns.ts";
 import { exigirModulo } from "../server/modulos.ts";
@@ -28,6 +29,10 @@ export type ConversaResumo = {
   numero: { id: string; rotulo: string };
   grupo: boolean;
   nome: string;
+  /** Não salvo na agenda: o nome de perfil do WhatsApp ("~ Nome"), à parte do número. */
+  perfil: string | null;
+  /** Salvo na agenda do celular (ou com nome dado no Omni). */
+  salvo: boolean;
   telefone: string | null;
   /** Endereço da foto pelo servidor do Omni (muda quando a foto muda); null sem foto. */
   foto: string | null;
@@ -56,6 +61,8 @@ export type MensagemWhatsApp = {
   autor: string | null;
   /** Quem enviou, no grupo (JID do WhatsApp): cor do nome e foto, como no WhatsApp Web. */
   autorId?: string | null;
+  /** Grupo, quem não está salvo na agenda: o nome de perfil ("~ Nome"), ao lado do número. */
+  autorPerfil?: string | null;
   tipo: "texto" | "imagem" | "video" | "audio" | "documento" | "figurinha" | "localizacao" | "contato" | "outro";
   texto: string | null;
   arquivo: string | null;
@@ -85,16 +92,24 @@ async function pessoa(): Promise<string> {
   return id;
 }
 
+/** Agenda do celular dos números (0088): o nome salvo por JID, @lid e telefone. */
+async function agendasDosNumeros(db: Db, numeros: string[]): Promise<Map<string, Agenda>> {
+  if (!numeros.length) return new Map();
+  const contatos = await db.select().from(schema.whatsappContacts).where(inArray(schema.whatsappContacts.numberId, numeros));
+  return new Map(numeros.map((id) => [id, montarAgenda(contatos.filter((x) => x.numberId === id))]));
+}
+
 async function resumir(db: Db, filtro: ReturnType<typeof and> | undefined, limite = 300): Promise<ConversaResumo[]> {
   const c = schema.whatsappChats;
   const n = schema.whatsappNumbers;
   const brutas = await db
-    .select({ c, numero: { id: n.id, rotulo: n.label } })
+    .select({ c, numero: { id: n.id, rotulo: n.label }, agendaLida: n.contactsSyncedAt })
     .from(c)
     .innerJoin(n, eq(n.id, c.numberId))
     .where(and(isNotNull(c.lastMessageAt), filtro))
     .orderBy(desc(c.lastMessageAt))
     .limit(limite);
+  const agendas = await agendasDosNumeros(db, [...new Set(brutas.filter((l) => l.agendaLida).map((l) => l.numero.id))]);
   // Responder e ligar dependem só do número: uma vez por número, não por conversa (0072).
   const numeros = [...new Set(brutas.map((l) => l.numero.id))];
   const permissoes = new Map(
@@ -167,7 +182,7 @@ async function resumir(db: Db, filtro: ReturnType<typeof and> | undefined, limit
     id: x.id,
     numero,
     grupo: x.isGroup,
-    nome: x.name ?? formatarTelefone(x.phone) ?? (x.isGroup ? "Grupo" : "Contato"),
+    ...nomeDaConversa({ grupo: x.isGroup, nome: x.name, nomeManual: x.nameManual, telefone: x.phone, jid: x.jid, lid: x.lid }, agendas.get(numero.id) ?? null),
     telefone: x.phone,
     foto: x.photoUrl ? `/api/whatsapp/foto/${x.id}?v=${x.profileSyncAt?.getTime() ?? 0}` : null,
     ultimaEm: x.lastMessageAt?.toISOString() ?? null,
@@ -279,6 +294,20 @@ export const mensagensDaConversa = createServerFn({ method: "GET" })
         .select({ numberId: schema.whatsappChats.numberId, telefone: schema.whatsappChats.phone, jid: schema.whatsappChats.jid, grupo: schema.whatsappChats.isGroup })
         .from(schema.whatsappChats)
         .where(eq(schema.whatsappChats.id, data.chatId));
+      // Grupo: quem escreveu pelo nome salvo na agenda do celular; senão o número e o nome de perfil (0088).
+      if (conversa?.grupo) {
+        const [num] = await db.select({ lida: schema.whatsappNumbers.contactsSyncedAt }).from(schema.whatsappNumbers).where(eq(schema.whatsappNumbers.id, conversa.numberId));
+        const agenda = num?.lida ? ((await agendasDosNumeros(db, [conversa.numberId])).get(conversa.numberId) ?? null) : null;
+        if (agenda) {
+          const perfis = new Map(linhas.map((x) => [x.id, x.authorName]));
+          for (const msg of todas) {
+            if (msg.deMim || !msg.autorId) continue;
+            const n = nomeDoAutor(msg.autorId, perfis.get(msg.id) ?? null, agenda);
+            msg.autor = n.autor;
+            msg.autorPerfil = n.perfil;
+          }
+        }
+      }
       const tel = conversa && !conversa.grupo ? (conversa.telefone ?? conversa.jid.match(/^(\d{8,15})@s\.whatsapp\.net$/)?.[1] ?? null) : null;
       if (conversa && tel) {
         const ligacoes = await db

@@ -12,6 +12,7 @@ import {
   Pin,
   PinOff,
   Star,
+  UserPlus,
   Download,
   FileText,
   Image,
@@ -92,7 +93,7 @@ import { AvisoNaoLidas, SetaParaBaixo, useRolagemDoChat } from "../comum/Rolagem
 import { VincularContato } from "../unica/Vincular.tsx";
 import { ImagemComPrevia } from "../comum/ImagemComPrevia.tsx";
 import { PreviaDoLink, primeiroLink, TextoComLinks } from "./Links.tsx";
-import { fixarConversa } from "../../lib/whatsapp-acoes-fns.ts";
+import { fixarConversa, salvarContatoWhatsApp } from "../../lib/whatsapp-acoes-fns.ts";
 import { corDoAutor, FotoDoAutor } from "./AutorDoGrupo.tsx";
 import {
   BarraDeFixadas,
@@ -907,8 +908,9 @@ function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo
         }`}
       >
         {comAutor && inicio && m.autor && (
-          <p className="mb-0.5 text-xs font-semibold" style={{ color: corDoAutor(m.autorId ?? m.autor) }}>
-            {m.autor}
+          <p className="mb-0.5 flex items-baseline gap-2 text-xs font-semibold" style={{ color: corDoAutor(m.autorId ?? m.autor) }}>
+            <span>{m.autor}</span>
+            {m.autorPerfil && <span className="truncate font-normal text-muted">~ {m.autorPerfil}</span>}
           </p>
         )}
         {m.ensaio && (
@@ -1864,30 +1866,48 @@ export function ConectarWhatsApp({ onFechar, automatico = false }: { onFechar?: 
 function NomeDaConversa({ conversa }: { conversa: ConversaResumo }) {
   const qc = useQueryClient();
   const [editando, setEditando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  // Adicionar/editar contato (0088): com o número, salva na agenda do celular (como no WhatsApp Web).
   const salvar = useMutation({
-    mutationFn: (nome: string) =>
-      renomearContato({ data: { chatId: conversa.id, nome } }),
-    onSuccess: () => {
+    mutationFn: async (nome: string) =>
+      conversa.telefone
+        ? salvarContatoWhatsApp({ data: { numberId: conversa.numero.id, telefone: conversa.telefone, nome, chatId: conversa.id } })
+        : renomearContato({ data: { chatId: conversa.id, nome } }).then(() => ({ noCelular: false })),
+    onSuccess: (r) => {
       setEditando(false);
+      setAviso(r.noCelular ? null : "Salvo no Omni (não foi para a agenda do celular neste ambiente).");
       void qc.invalidateQueries({ queryKey: ["whatsapp", "conversas"] });
     },
   });
   if (!editando)
     return (
-      <h2 className="flex min-w-0 items-center gap-1.5 font-semibold">
-        <span className="truncate">{conversa.nome}</span>
-        {!conversa.grupo && conversa.podeResponder && (
-          <button
-            type="button"
-            onClick={() => setEditando(true)}
-            aria-label="Dar um nome a este contato"
-            title="Dar um nome a este contato"
-            className="shrink-0 rounded p-0.5 text-muted hover:text-ink"
-          >
-            <Pencil size={14} aria-hidden />
-          </button>
-        )}
-      </h2>
+      <div className="min-w-0">
+        <h2 className="flex min-w-0 items-center gap-1.5 font-semibold">
+          <span className="truncate">{conversa.nome}</span>
+          {!conversa.salvo && conversa.perfil && <span className="truncate text-xs font-normal text-muted">~ {conversa.perfil}</span>}
+          {!conversa.grupo && conversa.podeResponder && (conversa.salvo || !conversa.telefone) && (
+            <button
+              type="button"
+              onClick={() => setEditando(true)}
+              aria-label="Editar contato"
+              title="Editar contato"
+              className="shrink-0 rounded p-0.5 text-muted hover:text-ink"
+            >
+              <Pencil size={14} aria-hidden />
+            </button>
+          )}
+          {!conversa.grupo && conversa.podeResponder && !conversa.salvo && conversa.telefone && (
+            <button
+              type="button"
+              onClick={() => setEditando(true)}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-linha px-2 py-0.5 text-xs font-medium text-floresta-texto hover:bg-superficie-2"
+            >
+              <UserPlus size={13} aria-hidden /> Adicionar contato
+            </button>
+          )}
+        </h2>
+        {aviso && <p className="text-xs text-muted">{aviso}</p>}
+      </div>
     );
   return (
     <form
@@ -1901,12 +1921,7 @@ function NomeDaConversa({ conversa }: { conversa: ConversaResumo }) {
         name="nome"
         autoFocus
         maxLength={120}
-        defaultValue={
-          conversa.telefone &&
-          conversa.nome === formatarTelefone(conversa.telefone)
-            ? ""
-            : conversa.nome
-        }
+        defaultValue={conversa.salvo ? conversa.nome : (conversa.perfil ?? "")}
         placeholder="Nome do contato"
         aria-label="Nome do contato"
         className="min-w-0 rounded-md border border-linha bg-superficie px-2 py-0.5 text-sm"

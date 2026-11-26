@@ -125,6 +125,8 @@ As quatro `WHATSAPP_*` de conexão vão juntas, ou nenhuma (`docs/integracoes/wh
 | `WHATSAPP_WEBHOOK_SECRET` 🔒 | W | — | Segredo do webhook, diferente da chave. O web o cadastra em cada número da Evolution. |
 | `WHATSAPP_WEBHOOK_URL` | W | — | Para onde a Evolution manda os eventos (`http://web:3000/api/whatsapp/webhook` no compose). |
 | `WHATSAPP_ENVIO` | W | `ensaio` | `desligado`, `ensaio` ou `real` (só produção). |
+| `WHATSAPP_ACOES_URL` | W K | — | Ponte de ações do Omni dentro da Evolution (`http://evolution:8099` no compose): agenda do celular, adicionar contato, fixar e favoritar no celular. Vazio = desligada. |
+| `WHATSAPP_ACOES_TOKEN` 🔒 | W K C | — | Token da ponte de ações (mín. 32), o mesmo que a Evolution recebe em `OMNI_ACOES_TOKEN`. |
 | `EVOLUTION_POSTGRES_PASSWORD` 🔒 | C | — | Banco próprio da Evolution. |
 | `CHAMADAS_HABILITADAS` | W | `off` | Liga as chamadas pessoais do WhatsApp na tela. |
 | `CHAMADAS_SERVICO_URL` | W K | — | Serviço de voz: `http://127.0.0.1:…` no desenvolvimento, `http://voz:8098` no compose. |

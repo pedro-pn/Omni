@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { EvolutionClient, type ConfigWebhook, type WhatsApp } from "@omni/integrations/whatsapp";
+import { EvolutionClient, PonteDeAcoes, type ConfigWebhook, type WhatsApp } from "@omni/integrations/whatsapp";
 
 import { getEnv } from "./env.ts";
 
@@ -25,6 +25,15 @@ export function getWhatsApp(): { whatsapp: WhatsApp; webhook: ConfigWebhook } | 
     webhook: { url: env.WHATSAPP_WEBHOOK_URL, segredo: env.WHATSAPP_WEBHOOK_SECRET },
   };
   return cliente;
+}
+
+let ponte: PonteDeAcoes | null | undefined;
+/** Ponte de ações dentro da Evolution (agenda, contato, fixar, favoritar); null se desligada. */
+export function getPonteDeAcoes(): PonteDeAcoes | null {
+  if (ponte !== undefined) return ponte;
+  const env = getEnv();
+  ponte = env.WHATSAPP_ACOES_URL && env.WHATSAPP_ACOES_TOKEN ? new PonteDeAcoes({ url: env.WHATSAPP_ACOES_URL, token: env.WHATSAPP_ACOES_TOKEN }) : null;
+  return ponte;
 }
 
 /** Compara o segredo recebido com o configurado em tempo constante. */

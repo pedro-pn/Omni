@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createPool, createWorkerDb } from "@omni/db";
 import { FiltroAppClient } from "@omni/integrations/filtroapp";
 import { GraphClient } from "@omni/integrations/graph";
-import { EvolutionClient } from "@omni/integrations/whatsapp";
+import { EvolutionClient, PonteDeAcoes } from "@omni/integrations/whatsapp";
 import { PrismaClient } from "@omni/integrations/prisma";
 import { PgBoss } from "pg-boss";
 
@@ -27,6 +27,7 @@ import { conferirNumeros } from "./whatsapp/estado.ts";
 import { sincronizarPessoasDoEntra } from "./entra/pessoas.ts";
 import { recuperarRecentes } from "./whatsapp/historico.ts";
 import { atualizarPerfis } from "./whatsapp/perfis.ts";
+import { lerAgendas } from "./whatsapp/agenda.ts";
 import { syncPrismaComercial } from "./sync/prisma-comercial.ts";
 import { syncRelatorios } from "./sync/filtroapp-relatorios.ts";
 import { enviarLembretes } from "./tarefas/lembretes.ts";
@@ -74,6 +75,7 @@ import { conferidorDoTeto, openAiComTeto } from "./operacao/teto-ia.ts";
  *   saude-operacao      1 h    status do backup e do ensaio de restauração (OPERACAO_STATUS=ligado) → erro do sistema se passar do limite
  *   whatsapp-recuperar 10 min  relê as últimas 2 h na Evolution e grava o que o webhook perdeu
  *   whatsapp-perfis    30 min  nome dos grupos e endereço da foto das conversas (lista da Evolution)
+ *   whatsapp-agenda    6 h     contatos salvos na agenda do celular (ponte de ações; 0088)
  *   chamadas-arquivar   2 min  gravações → M4A cifrado no SharePoint (OmniAnexos); apaga de vez as excluídas/vencidas
  *   ia-alertas         15 min  alertas pedidos à IA (@IA, /alerta): lê RDOs novos (IA_ALERTAS) e publica disparos na janela útil
  *   ia-assinaturas     30 min  nome, cargo e empresa dos remetentes externos pela assinatura (IA_ASSINATURAS; texto não guardado)
@@ -283,6 +285,11 @@ if (env.WHATSAPP_EVOLUTION_URL && env.WHATSAPP_EVOLUTION_KEY) {
   await tarefa("whatsapp-estado", "*/5 * * * *", () => conferirNumeros(db, evolution));
   await tarefa("whatsapp-recuperar", "*/10 * * * *", () => recuperarRecentes(db, evolution));
   await tarefa("whatsapp-perfis", "*/30 * * * *", () => atualizarPerfis(db, evolution));
+  // Agenda do celular (0088): só com a ponte de ações ligada na Evolution.
+  if (env.WHATSAPP_ACOES_URL && env.WHATSAPP_ACOES_TOKEN) {
+    const ponte = new PonteDeAcoes({ url: env.WHATSAPP_ACOES_URL, token: env.WHATSAPP_ACOES_TOKEN });
+    await tarefa("whatsapp-agenda", "20 */6 * * *", () => lerAgendas(db, ponte));
+  }
 } else {
   console.warn("[worker] WhatsApp não configurado (WHATSAPP_EVOLUTION_*): conferência dos números desligada");
 }

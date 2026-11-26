@@ -33,6 +33,9 @@ const schema = z
   /** Evolution própria do Omni (ADR 0004): o worker só confere o estado dos números. */
   WHATSAPP_EVOLUTION_URL: z.preprocess((v) => (v === "" ? undefined : v), z.url({ protocol: /^https?$/ }).optional()),
   WHATSAPP_EVOLUTION_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(32).optional()),
+  // Ponte de ações do Omni dentro da Evolution: lê a agenda do celular (job whatsapp-agenda).
+  WHATSAPP_ACOES_URL: z.preprocess((v) => (v === "" ? undefined : v), z.url({ protocol: /^http$/ }).optional()),
+  WHATSAPP_ACOES_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(32).optional()),
   // IA v2 (ADR 0005): leitura dos RDOs pelo LLM. Desligada por padrão (manda o texto do RDO à OpenAI).
   IA_LEITURA_RDO: z.enum(["desligada", "ligada"]).default("desligada"),
   /** Resumo das reuniões do Teams da missão pelo LLM (precisa do acesso às transcrições ligado no tenant). */

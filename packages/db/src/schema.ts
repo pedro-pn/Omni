@@ -989,6 +989,8 @@ export const whatsappNumbers = pgTable("whatsapp_numbers", {
   lastError: text("last_error"),
   createdBy: uuid("created_by").references(() => people.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** 0088: quando a agenda do celular foi lida pela última vez (com ela, quem não está salvo aparece pelo número). */
+  contactsSyncedAt: timestamp("contacts_synced_at", { withTimezone: true }),
 });
 
 export const whatsappNumberMembers = pgTable(
@@ -1670,5 +1672,21 @@ export const whatsappChatPins = pgTable(
     pinnedAt: timestamp("pinned_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.personId, t.chatId] })],
+);
+
+// ---------------------------------------------------------------- 0088: agenda do celular
+
+/** Contatos salvos na agenda do celular de cada número (nome salvo; o nome de perfil não entra). */
+export const whatsappContacts = pgTable(
+  "whatsapp_contacts",
+  {
+    numberId: uuid("number_id").notNull().references(() => whatsappNumbers.id, { onDelete: "cascade" }),
+    jid: text("jid").notNull(),
+    lid: text("lid"),
+    phone: text("phone"),
+    savedName: text("saved_name").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.numberId, t.jid] })],
 );
 

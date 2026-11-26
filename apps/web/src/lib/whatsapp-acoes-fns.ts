@@ -9,7 +9,7 @@ import { getPool } from "../server/db.ts";
 import { getEnv } from "../server/env.ts";
 import { exigirModulo } from "../server/modulos.ts";
 import { personIdFromRequest } from "../server/session.ts";
-import { getWhatsApp } from "../server/whatsapp.ts";
+import { getPonteDeAcoes, getWhatsApp } from "../server/whatsapp.ts";
 import { enviarPeloWhatsApp, MAX_ARQUIVO, TIPOS_ARQUIVO } from "../server/whatsapp-envio.ts";
 import { ErroParaTela } from "./erros.ts";
 
@@ -46,6 +46,7 @@ async function conversa(db: Db, personId: string, chatId: string) {
       grupo: schema.whatsappChats.isGroup,
       instancia: schema.whatsappNumbers.instanceName,
       dono: schema.whatsappNumbers.ownerPersonId,
+      linha: schema.whatsappNumbers.phone,
       conectado: sql<boolean>`${schema.whatsappNumbers.status} = 'conectado'`,
     })
     .from(schema.whatsappChats)
@@ -69,6 +70,28 @@ async function noWhatsApp(c: { conectado: boolean }, fazer: (w: NonNullable<Retu
     throw error;
   }
   return "real";
+}
+
+/**
+ * Leva ao celular o que hoje fica no Omni (fixar, favoritar), pela ponte de ações: só com o envio
+ * real, a ponte ligada e o dono do número. Se o celular não aceitar, fica no Omni (sem erro).
+ */
+async function noCelular(
+  personId: string,
+  chatId: string,
+  fazer: (ponte: NonNullable<ReturnType<typeof getPonteDeAcoes>>, linha: string, c: Awaited<ReturnType<typeof conversa>>) => Promise<void>,
+): Promise<boolean> {
+  const ponte = getPonteDeAcoes();
+  if (getEnv().WHATSAPP_ENVIO !== "real" || !ponte) return false;
+  const c = await withPerson(getPool(), personId, (db) => conversa(db, personId, chatId));
+  if (!c.responde || !c.conectado || !c.linha) return false;
+  try {
+    await fazer(ponte, c.linha, c);
+    return true;
+  } catch (error) {
+    console.error("[whatsapp] ação não chegou ao celular:", (error as { code?: string }).code ?? (error as Error).name);
+    return false;
+  }
 }
 
 const chave = (c: { jid: string; grupo: boolean }, m: Mensagem) => ({ remoteJid: c.jid, fromMe: m.deMim, id: m.waId, participant: c.grupo && !m.deMim ? (m.autorId ?? null) : null });
@@ -159,7 +182,7 @@ export const encaminharMensagens = createServerFn({ method: "POST" })
 // ---------------------------------------------------------------- no Omni
 
 export const favoritarMensagem = createServerFn({ method: "POST" })
-  .validator(z.object({ chatId: z.uuid(), waId: z.string().min(1).max(128), favorita: z.boolean() }))
+  .validator(z.object({ chatId: z.uuid(), waId: z.string().min(1).max(128), favorita: z.boolean(), deMim: z.boolean().optional() }))
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const personId = await pessoa();
     await withPerson(getPool(), personId, (db) =>
@@ -168,12 +191,13 @@ export const favoritarMensagem = createServerFn({ method: "POST" })
         .values({ personId, chatId: data.chatId, waId: data.waId, starred: data.favorita })
         .onConflictDoUpdate({ target: [schema.whatsappMessageFlags.personId, schema.whatsappMessageFlags.chatId, schema.whatsappMessageFlags.waId], set: { starred: data.favorita, updatedAt: new Date() } }),
     );
+    await noCelular(personId, data.chatId, (p, linha, c) => p.favoritar(linha, c.jid, data.waId, data.deMim ?? false, data.favorita));
     return { ok: true };
   });
 
 /** Fixar uma mensagem no topo da conversa (até 3, como no WhatsApp: a mais antiga sai). Só o dono do número. */
 export const fixarMensagem = createServerFn({ method: "POST" })
-  .validator(z.object({ chatId: z.uuid(), waId: z.string().min(1).max(128), fixar: z.boolean() }))
+  .validator(z.object({ chatId: z.uuid(), waId: z.string().min(1).max(128), fixar: z.boolean(), deMim: z.boolean().optional(), autorId: z.string().max(200).nullable().optional() }))
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const personId = await pessoa();
     await withPerson(getPool(), personId, async (db) => {
@@ -188,6 +212,10 @@ export const fixarMensagem = createServerFn({ method: "POST" })
       const fixadas = await db.select({ waId: p.waId }).from(p).where(eq(p.chatId, data.chatId)).orderBy(sql`${p.pinnedAt} DESC`);
       for (const f of fixadas.slice(3)) await db.delete(p).where(and(eq(p.chatId, data.chatId), eq(p.waId, f.waId)));
     });
+    // No WhatsApp, a mensagem fixada aparece para todos na conversa (como no celular).
+    await noCelular(personId, data.chatId, (p, linha, c) =>
+      p.fixarMensagem(linha, c.jid, { id: data.waId, fromMe: data.deMim ?? false, participante: c.grupo && !data.deMim ? (data.autorId ?? null) : null }, data.fixar),
+    );
     return { ok: true };
   });
 
@@ -206,5 +234,53 @@ export const fixarConversa = createServerFn({ method: "POST" })
       if ((n?.n ?? 0) >= 3) throw new ErroParaTela("Dá para fixar até 3 conversas. Desafixe uma antes.");
       await db.insert(p).values({ personId, chatId: data.chatId }).onConflictDoNothing();
     });
+    await noCelular(personId, data.chatId, (p, linha, c) => p.fixarConversa(linha, c.jid, data.fixar));
     return { ok: true };
   });
+
+/**
+ * Adicionar (ou editar) contato, como no WhatsApp Web (0088): com o envio real e a ponte de ações
+ * ligada, salva na agenda do celular do número — e por ela em todos os aparelhos; sem isso
+ * (ensaio), fica só no Omni (nome dado no Omni). Só o dono do número.
+ */
+export const salvarContatoWhatsApp = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      numberId: z.uuid(),
+      telefone: z.string().regex(/^\d{8,15}$/, "Número inválido."),
+      nome: z.string().trim().min(1, "Escreva o nome.").max(120),
+      /** Conversa com a pessoa (quando há): no ensaio, o nome fica nela. */
+      chatId: z.uuid().optional(),
+    }),
+  )
+  .handler(async ({ data }): Promise<{ noCelular: boolean }> => {
+    const personId = await pessoa();
+    const [numero] = await withPerson(getPool(), personId, (db) =>
+      db
+        .select({ dono: schema.whatsappNumbers.ownerPersonId, telefone: schema.whatsappNumbers.phone, status: schema.whatsappNumbers.status })
+        .from(schema.whatsappNumbers)
+        .where(eq(schema.whatsappNumbers.id, data.numberId)),
+    );
+    if (!numero || numero.dono !== personId) throw new ErroParaTela("Só o dono do número adiciona contatos.");
+    const jid = `${data.telefone}@s.whatsapp.net`;
+    const ponte = getPonteDeAcoes();
+    let noCelular = false;
+    if (getEnv().WHATSAPP_ENVIO === "real" && ponte && numero.status === "conectado" && numero.telefone) {
+      try {
+        await ponte.salvarContato(numero.telefone, jid, data.nome);
+        noCelular = true;
+      } catch {
+        throw new ErroParaTela("O WhatsApp não salvou o contato agora. Confira se o número está conectado e tente de novo.");
+      }
+    }
+    await withPerson(getPool(), personId, async (db) => {
+      await db
+        .insert(schema.whatsappContacts)
+        .values({ numberId: data.numberId, jid, phone: data.telefone, savedName: data.nome })
+        .onConflictDoUpdate({ target: [schema.whatsappContacts.numberId, schema.whatsappContacts.jid], set: { savedName: data.nome, updatedAt: new Date() } });
+      // Fora do celular (ensaio, ponte desligada), o nome também fica na conversa (nome dado no Omni).
+      if (!noCelular && data.chatId) await db.execute(sql`SELECT app.whatsapp_renomear_contato(${data.chatId}::uuid, ${data.nome})`);
+    });
+    return { noCelular };
+  });
+
