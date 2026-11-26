@@ -38,6 +38,7 @@ test('agenda: só o nome salvo (name), não o de perfil (notify); a primeira lei
   assert.deepEqual(r.contatos, [{ jid: '5547900000011@s.whatsapp.net', lid: null, telefone: '5547900000011@s.whatsapp.net', nome: 'Ana Campo' }]);
   assert.deepEqual(s.chaves, { 'app-state-sync-version': { critical_unblock_low: null } });
   assert.deepEqual(r.diagnostico, { versaoDaColecao: 42, eventosNaLeitura: 2, comNomeNaLeitura: 2, eventosDesdeOInicio: 3, salvosEmMemoria: 1 });
+  assert.equal(r.completa, true);
   // Histórico do pareamento também conta.
   s.ev.emit('messaging-history.set', { contacts: [{ id: '5547900000015@s.whatsapp.net', name: 'Dani' }] });
   assert.deepEqual(s.chamadas[0], ['resync', ['critical_unblock_low'], true]);
@@ -81,3 +82,24 @@ test('HTTP: só POST /v1/acoes com o token, o Host esperado e sem Origin', async
   assert.equal(p.autorizado(req({ host: 'outro:8099' })), false);
   assert.equal(p.autorizado({ ...req({}), method: 'GET' }), false);
 });
+
+test('coleção que não baixa: a mensagem do Baileys vai no diagnóstico e a lista não é completa', async () => {
+  const p = new PonteDeAcoes({ token: TOKEN, escutar: false });
+  const s = sessao('5547900000001');
+  const logs = [];
+  const logger = { info: (o, m) => logs.push(m), warn: () => {}, error: () => {}, debug: () => {} };
+  s.sock.resyncAppState = async () => logger.info({ name: 'critical_unblock_low', error: 'Error: failed to find key "AAA" to decode mutation\n    at x' }, 'failed to sync state from version');
+  s.sock.authState.keys.get = async () => ({ critical_unblock_low: null });
+  p.attach(s.sock, logger);
+  const r = await p.executar({ telefone: '5547900000001', acao: 'contatos' });
+  assert.equal(r.completa, false);
+  assert.equal(r.diagnostico.versaoDaColecao, 0);
+  assert.deepEqual(r.mensagens, ['info: failed to sync state from version — Error: failed to find key "AAA" to decode mutation']);
+  assert.deepEqual(logs, ['failed to sync state from version']); // o log original continua
+  // Histórico do pareamento torna a lista completa.
+  s.ev.emit('messaging-history.set', { contacts: [{ id: '5547900000015@s.whatsapp.net', name: 'Dani' }] });
+  const r2 = await p.executar({ telefone: '5547900000001', acao: 'contatos' });
+  assert.equal(r2.completa, true);
+  assert.equal(r2.contatos.length, 1);
+});
+
