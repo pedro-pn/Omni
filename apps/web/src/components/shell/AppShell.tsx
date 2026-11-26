@@ -1,5 +1,5 @@
 import { BellRing, ChartColumn, Download, Inbox, KeyRound, ListChecks, LogOut, type LucideIcon, Mail, MessageCircle, Moon, Phone, Search, Settings, ShieldCheck, Smartphone, Sun, Target, Users } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
@@ -169,6 +169,7 @@ export function AppShell({ me }: { me: Me }) {
   const [missaoId, setMissaoId] = useState<string | null>(null);
   const [conversaId, setConversaId] = useState<string | null>(null);
   const [centroEmail, setCentroEmail] = useState<CentroEmail | null>(null);
+  const qcShell = useQueryClient();
   const [abaMissao, setAbaMissao] = useState("resumo");
   const [vistaTarefas, setVistaTarefas] = useState<VistaTarefas | null>(null);
   const [tarefaDoAviso, setTarefaDoAviso] = useState<string | null>(null);
@@ -230,6 +231,20 @@ export function AppShell({ me }: { me: Me }) {
       },
     });
     return () => camada.registrar(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // "Conversar em particular" (mensagem de grupo): abre a conversa com a pessoa.
+  useEffect(() => {
+    const abrir = (e: Event) => {
+      const chatId = (e as CustomEvent<string>).detail;
+      if (typeof chatId !== "string") return;
+      setView("conversas");
+      setCentroEmail(null);
+      setConversaId(chatId);
+      void qcShell.invalidateQueries({ queryKey: ["whatsapp", "conversas"] });
+    };
+    window.addEventListener("omni:abrir-conversa", abrir);
+    return () => window.removeEventListener("omni:abrir-conversa", abrir);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => camada.definirVisivel(view === "chamadas"), [camada, view]);
