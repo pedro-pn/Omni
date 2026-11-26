@@ -10,11 +10,19 @@ const ERROS: Record<string, string> = {
   "login-invalido": "O login expirou. Tente de novo.",
   "conta-desativada": "Sua conta está desativada no Omni. Fale com a diretoria.",
   "dados-invalidos": "Confira o e-mail e o nome.",
+  "interno-invalido": "Usuário ou senha não conferem.",
+  "interno-bloqueado": "Muitas tentativas erradas. Espere 15 minutos e tente de novo.",
   "falha-login": "Não foi possível entrar. Tente de novo.",
 };
 
 export const Route = createFileRoute("/entrar")({
-  validateSearch: z.object({ erro: z.string().max(40).optional(), volta: z.string().max(2000).optional() }),
+  validateSearch: z.object({
+    erro: z.string().max(40).optional(),
+    volta: z.string().max(2000).optional(),
+    // Depois de criar a senha pelo link (0078): o usuário já preenchido.
+    usuario: z.string().max(60).optional(),
+    aviso: z.string().max(40).optional(),
+  }),
   beforeLoad: async ({ search }) => {
     if (await getMe()) throw redirect({ href: caminhoDeVolta(search.volta) });
   },
@@ -25,7 +33,7 @@ export const Route = createFileRoute("/entrar")({
 
 function Entrar() {
   const options = Route.useLoaderData();
-  const { erro, volta: voltaBruta } = Route.useSearch();
+  const { erro, volta: voltaBruta, usuario, aviso } = Route.useSearch();
   const volta = caminhoDeVolta(voltaBruta);
   const mensagem = erro ? (ERROS[erro] ?? ERROS["falha-login"]) : null;
 
@@ -39,8 +47,13 @@ function Entrar() {
         />
         <div className="rounded-lg bg-superficie p-6 shadow-sm">
           <h1 className="text-lg font-semibold">Entrar no Omni</h1>
-          <p className="mt-1 text-muted">Use a sua conta Microsoft da Filtrovali.</p>
+          <p className="mt-1 text-muted">Use a sua conta Microsoft da Filtrovali ou o usuário que a Administração criou para você.</p>
 
+          {aviso === "senha-criada" && !mensagem && (
+            <p role="status" className="mt-4 rounded-md border border-floresta/40 bg-floresta-clara px-3 py-2 text-floresta-texto">
+              Senha criada. Entre com o seu usuário e a senha nova.
+            </p>
+          )}
           {mensagem && (
             <p role="alert" className="mt-4 rounded-md border border-vermelho/40 px-3 py-2 text-vermelho">
               {mensagem}
@@ -57,6 +70,43 @@ function Entrar() {
           ) : (
             <p className="mt-5 text-muted">O login Microsoft ainda não está configurado neste ambiente.</p>
           )}
+
+          <form method="post" action="/auth/interno" className="mt-6 border-t border-linha pt-5">
+            <input type="hidden" name="volta" value={volta} />
+            <p className="text-sm font-medium">Sem conta Microsoft</p>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium">Usuário</span>
+              <input
+                name="login"
+                required
+                defaultValue={usuario ?? ""}
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2"
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium">Senha</span>
+              <input
+                name="senha"
+                type="password"
+                required
+                autoFocus={Boolean(usuario)}
+                autoComplete="current-password"
+                className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2"
+              />
+            </label>
+            <button
+              type="submit"
+              className="mt-4 w-full rounded-md border border-floresta px-4 py-2 font-medium text-floresta-texto hover:bg-floresta-clara"
+            >
+              Entrar com usuário e senha
+            </button>
+            <a href={usuario ? `/recuperar-senha?usuario=${encodeURIComponent(usuario)}` : "/recuperar-senha"} className="mt-2 block text-xs font-medium text-floresta-texto hover:underline">
+              Esqueci a senha
+            </a>
+          </form>
 
           {options.dev && (
             <form method="post" action="/auth/dev" className="mt-6 border-t border-linha pt-5">

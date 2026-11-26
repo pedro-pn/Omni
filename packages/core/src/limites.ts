@@ -71,6 +71,15 @@ export const LIMITES_FUNCOES: Record<string, RegraDeLimite[]> = {
   enviarContatoAoPrisma: [{ nome: "prisma-escrita", max: 30, janelaMs: MIN }],
   // Credenciais
   criarChave: [{ nome: "chave-api", max: 5, janelaMs: MIN }],
+  // Login interno (0078): o banco já limita a recuperação e a confirmação por conta; aqui, por IP/sessão.
+  pedirRecuperacaoDeSenha: [{ nome: "senha-recuperar", max: 5, janelaMs: MIN }, { nome: "senha-recuperar-hora", max: 20, janelaMs: HORA }],
+  pedirConfirmacaoDeEmail: [{ nome: "senha-email", max: 5, janelaMs: MIN }],
+  lerLinkInterno: [{ nome: "senha-link", max: 30, janelaMs: MIN }],
+  usarLinkDeSenha: [{ nome: "senha-link", max: 30, janelaMs: MIN }],
+  confirmarEmailPeloLink: [{ nome: "senha-link", max: 30, janelaMs: MIN }],
+  trocarMinhaSenha: [{ nome: "senha-trocar", max: 10, janelaMs: MIN }],
+  criarAcessoInterno: [{ nome: "acesso-interno", max: 20, janelaMs: MIN }],
+  novoLinkDeSenha: [{ nome: "acesso-interno", max: 20, janelaMs: MIN }],
 };
 
 export type ResultadoDoLimite = { ok: boolean; esperarSegundos: number; primeiroBloqueio: boolean };

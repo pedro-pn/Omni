@@ -7,7 +7,9 @@ import { clientIp, parseCookies, serializeCookie } from "./http.ts";
 export const SESSION_COOKIE = "omni_session";
 
 /** Sessão do pedido, mesmo sem o termo de uso aceito (só para a página do termo e para getMe). */
-export async function sessaoDoRequest(request: Request): Promise<{ personId: string; termosPendentes: boolean } | null> {
+export async function sessaoDoRequest(
+  request: Request,
+): Promise<{ personId: string; termosPendentes: boolean; acesso: "microsoft" | "interno" } | null> {
   const token = parseCookies(request.headers.get("cookie")).get(SESSION_COOKIE);
   return resolveSessionComTermos(getPool(), token, TERMOS.versao);
 }
