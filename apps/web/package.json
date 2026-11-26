@@ -10,27 +10,27 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@azure/msal-node": "^7.1.2",
+    "@azure/msal-node": "^7.2.3",
     "@fontsource/poppins": "^5.3.0",
     "@omni/core": "*",
     "@omni/db": "*",
-    "@tanstack/react-query": "^5.105.0",
+    "@tanstack/react-query": "^5.108.4",
     "@tanstack/react-router": "^1.170.46",
-    "@tanstack/react-start": "^1.169.4",
-    "lucide-react": "^1.61.0",
+    "@tanstack/react-start": "^1.169.7",
+    "lucide-react": "^1.78.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "sanitize-html": "^2.18.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@types/sanitize-html": "^2.16.0",
-    "@vitejs/plugin-react": "^6.1.2",
+    "@types/sanitize-html": "^2.16.2",
+    "@vitejs/plugin-react": "^6.3.0",
     "nitro": "3.0.260903-beta",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.8"
   }
 }
