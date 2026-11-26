@@ -103,3 +103,14 @@ test('coleção que não baixa: a mensagem do Baileys vai no diagnóstico e a li
   assert.equal(r2.contatos.length, 1);
 });
 
+test('lids: o telefone de cada @lid pelo mapeamento da sessão e o meu @lid; nada além de @lid', async () => {
+  const p = new PonteDeAcoes({ token: TOKEN, escutar: false });
+  const s = sessao('5547900000001');
+  s.sock.authState.creds.me.lid = '111111111111111:12@lid';
+  s.sock.signalRepository = { lidMapping: { getPNForLID: async (lid) => (lid === '222222222222222@lid' ? '5547900000011:0@s.whatsapp.net' : null) } };
+  p.attach(s.sock);
+  const r = await p.executar({ telefone: '5547900000001', acao: 'lids', lids: ['222222222222222@lid', '333333333333333@lid', '5547900000012@s.whatsapp.net'] });
+  assert.deepEqual(r, { mapa: { '222222222222222@lid': '5547900000011', '333333333333333@lid': null }, eu: '111111111111111@lid' });
+  await assert.rejects(p.executar({ telefone: '5547900000001', acao: 'lids', lids: 'x' }), /dados_invalidos/);
+});
+

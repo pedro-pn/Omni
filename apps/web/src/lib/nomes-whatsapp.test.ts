@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { montarAgenda, nomeDaConversa, nomeDoAutor } from "./nomes-whatsapp.ts";
+import { nomeDaMencao, montarAgenda, nomeDaConversa, nomeDoAutor } from "./nomes-whatsapp.ts";
 
 const agenda = montarAgenda([{ jid: "5547900000011@s.whatsapp.net", lid: "999001@lid", phone: "5547900000011", savedName: "Ana (obra)" }]);
 const pessoa = (extra: Partial<Parameters<typeof nomeDaConversa>[0]>) => ({ grupo: false, nome: "Ana Perfil", nomeManual: false, telefone: "5547900000011", jid: "5547900000011@s.whatsapp.net", lid: null, ...extra });
@@ -25,3 +25,20 @@ describe("nomes do WhatsApp como no WhatsApp Web", () => {
     expect(nomeDoAutor("5547900000078@s.whatsapp.net", "Bruno", null)).toEqual({ autor: "Bruno", perfil: null });
   });
 });
+
+describe("marcações nos grupos (0089)", () => {
+  const agenda = montarAgenda([{ jid: "5547900000011@s.whatsapp.net", lid: "222222222222222@lid", phone: "5547900000011", savedName: "Ana Campo" }]);
+  const base = { eu: false, nomeDaConversa: null, nomeManual: false, perfil: null };
+  it("salvo → o nome salvo (também pelo @lid); não salvo → o número; sem número → ~ perfil; nada → null", () => {
+    expect(nomeDaMencao({ ...base, jid: "222222222222222@lid", telefone: "5547900000011" }, agenda)).toEqual({ chave: "222222222222222", nome: "Ana Campo", telefone: "5547900000011", eu: false });
+    expect(nomeDaMencao({ ...base, jid: "5547900000012@s.whatsapp.net", telefone: "5547900000012", perfil: "Caio" }, agenda)?.nome).toBe("(47) 90000-0012");
+    expect(nomeDaMencao({ ...base, jid: "333333333333333@lid", telefone: null, perfil: "Caio" }, agenda)?.nome).toBe("~ Caio");
+    expect(nomeDaMencao({ ...base, jid: "333333333333333@lid", telefone: null }, agenda)).toBeNull();
+  });
+  it("sem a agenda lida: o nome da conversa ou o de perfil; nome dado no Omni vale sempre; eu → Você", () => {
+    expect(nomeDaMencao({ ...base, jid: "5547900000012@s.whatsapp.net", telefone: "5547900000012", perfil: "Caio" }, null)?.nome).toBe("Caio");
+    expect(nomeDaMencao({ ...base, jid: "5547900000012@s.whatsapp.net", telefone: "5547900000012", nomeDaConversa: "Caio Obra", nomeManual: true }, agenda)?.nome).toBe("Caio Obra");
+    expect(nomeDaMencao({ ...base, jid: "111111111111111@lid", telefone: null, eu: true }, agenda)).toEqual({ chave: "111111111111111", nome: "Você", telefone: null, eu: true });
+  });
+});
+
