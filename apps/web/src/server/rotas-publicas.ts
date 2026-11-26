@@ -105,6 +105,13 @@ export const ROTAS_PUBLICAS: RotaPublica[] = [
     exposicao: "internet",
   },
   {
+    caminho: "/auth/interno",
+    metodos: ["POST"],
+    quemChama: "navegador (login interno, sem conta Microsoft)",
+    credencial: "usuário e senha conferidos no banco (bcrypt; 5 erros bloqueiam 15 min); mesma origem (CSRF) e limite de login por IP",
+    exposicao: "internet",
+  },
+  {
     caminho: "/auth/sair",
     metodos: ["POST"],
     quemChama: "navegador",

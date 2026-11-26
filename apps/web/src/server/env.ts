@@ -29,6 +29,8 @@ const schema = z
     PRISMA_OMNI_READER_TOKEN: opcional(z.string().regex(/^prisma_omni_reader_[a-f0-9]{64}$/)),
     // Envio de e-mail pelo Omni: "desligado", "ensaio" (monta e registra, não envia) ou "real" (só em produção).
     EMAIL_ENVIO: z.enum(["desligado", "ensaio", "real"]).default("ensaio"),
+    // Caixa que manda os e-mails do sistema (avisos; no web, os links do login interno: 0078).
+    EMAIL_AVISOS_REMETENTE: opcional(z.email()),
     // Microsoft Graph, app "Omni – Integrações" (Fase 4): opcional até ser configurado.
     GRAPH_TENANT_ID: z.string().optional(),
     GRAPH_CLIENT_ID: z.string().optional(),

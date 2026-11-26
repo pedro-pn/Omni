@@ -22,13 +22,15 @@ export type Me = {
   termosPendentes: boolean;
   /** Módulos liberados para a pessoa (0071; Administração → Módulos). */
   modulos: Modulo[];
+  /** Conta Microsoft da empresa ou login interno (sem caixa de e-mail). */
+  acesso: "microsoft" | "interno";
 };
 
 /** Pessoa da sessão atual, ou null. Tudo lido pelo papel omni_app, com RLS. */
 export const getMe = createServerFn({ method: "GET" }).handler(async (): Promise<Me | null> => {
   const sessao = await sessaoDoRequest(getRequest());
   if (!sessao) return null;
-  const { personId, termosPendentes } = sessao;
+  const { personId, termosPendentes, acesso } = sessao;
   const modulos = termosPendentes ? [] : await modulosLiberados(personId);
   return withPerson(getPool(), personId, async (db) => {
     const [person] = await db.select().from(schema.people).where(eq(schema.people.id, personId));
@@ -46,6 +48,7 @@ export const getMe = createServerFn({ method: "GET" }).handler(async (): Promise
       ambiente: ambienteDe(getEnv()),
       termosPendentes,
       modulos,
+      acesso,
     };
   });
 });

@@ -27,6 +27,7 @@ Entrega E14 (pilares 7 e 8). O que responde sem a sessão de quem está logado, 
 | `/api/chamadas/eventos` | POST | serviço de voz (`http://web:3000`) | chave Bearer | **interna** |
 | `/auth/microsoft`, `/auth/callback` | GET | navegador (login Microsoft) | state, nonce e PKCE em cookie selado | internet |
 | `/auth/dev` | POST | navegador | recusada fora do desenvolvimento | internet |
+| `/auth/interno` | POST | navegador (login interno, sem conta Microsoft) | usuário e senha conferidos no banco (bcrypt; 5 erros bloqueiam 15 min); mesma origem e limite de login por IP | internet |
 | `/auth/sair` | POST | navegador | mesma origem; encerra só o próprio cookie | internet |
 
 Também são públicos os arquivos de `apps/web/public` (marca, ícones, áudio, `manifest.webmanifest`, `sw.js`, `openapi.json`) e os `/assets` do build. Nenhum traz dado de ninguém.

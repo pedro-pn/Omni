@@ -37,7 +37,7 @@ No Lovable Cloud a `SUPABASE_SERVICE_ROLE_KEY` não fica disponível. Em vez del
 3. Ele manda o pacote dos 8 anexos: os arquivos no caminho `object_key` de cada um e a lista `caminho;tamanho;sha256`.
 4. No `deploy/.env.production`:
    ```
-   FOCO_SUPABASE_URL=https://lqerqhpydoksyigecjhx.supabase.co
+   FOCO_SUPABASE_URL=https://<projeto do Foco>.supabase.co
    FOCO_SUPABASE_CHAVE_PUBLICA=<a SUPABASE_PUBLISHABLE_KEY do Foco (a mesma do front; não é segredo)>
    FOCO_EXPORT_TOKEN=<o segredo da exportação>
    FOCO_ANEXOS_PASTA=/tmp/foco-anexos
@@ -52,7 +52,7 @@ Links de agenda: só continuam se o Foco tiver a `APPLE_CALENDAR_SIGNING_KEY` pr
 No `deploy/.env.production` da VPS (e no `.env` local, se for rodar o ensaio daqui). **Nunca no Git nem no chat:**
 
 ```
-FOCO_SUPABASE_URL=https://lqerqhpydoksyigecjhx.supabase.co
+FOCO_SUPABASE_URL=https://<projeto do Foco>.supabase.co
 FOCO_SUPABASE_SERVICE_ROLE_KEY=<a chave de serviço que o desenvolvedor passou>
 FOCO_CHAVE_API_TESTE=<a chave foco_live_… que ele passou (opcional: o relatório confere se ela continua valendo)>
 APPLE_CALENDAR_SIGNING_KEY=<a chave dos feeds que ele passou>
