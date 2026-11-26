@@ -96,6 +96,18 @@ describe.skipIf(!available)("ações nas mensagens do WhatsApp", () => {
     await app.query("SELECT app.whatsapp_registrar_reacao('omni-naoexiste1', $1, NULL, 'M1', false, NULL, NULL, '👍', now())", [GRUPO]);
   });
 
+  it("marcações (0089): guarda os JIDs de pessoa, sem repetir; o resto fica de fora", async () => {
+    await app.query(
+      "SELECT app.whatsapp_registrar_mensagem($1, $2, NULL, true, NULL, 'M9', false, '5547900000012@s.whatsapp.net', 'Caio', 'texto', '@222222222222222 olha', NULL, now(), NULL, NULL, NULL, false, $3)",
+      [instancia, GRUPO, ["222222222222222@lid", "5547900000011@s.whatsapp.net", "222222222222222@lid", "120363000000000001@g.us", "x"]],
+    );
+    const { rows } = await owner.query("SELECT mentions FROM whatsapp_messages WHERE chat_id = $1 AND wa_id = 'M9'", [chat]);
+    expect([...rows[0].mentions].sort()).toEqual(["222222222222222@lid", "5547900000011@s.whatsapp.net"]);
+    // Sem marcações (a chamada antiga, 17 parâmetros), a lista fica vazia.
+    const { rows: m5 } = await owner.query("SELECT mentions FROM whatsapp_messages WHERE chat_id = $1 AND wa_id = 'M5'", [chat]);
+    expect(m5[0].mentions).toEqual([]);
+  });
+
   it("RLS: quem vê a conversa vê reações e fixadas; só o dono fixa; favoritas, apagadas para mim e conversas fixadas são de cada um", async () => {
     await app.query("SELECT app.whatsapp_registrar_reacao($1, $2, NULL, 'M3', false, '5547900000012@s.whatsapp.net', 'Caio', '👍', now())", [instancia, GRUPO]);
     const ver = (quem: string, tabela: string) => withPerson(app, quem, (db) => db.execute(sql.raw(`SELECT count(*)::int AS n FROM ${tabela} WHERE chat_id = '${chat}'`))).then((r) => r.rows[0]!.n);

@@ -59,6 +59,7 @@ import {
 } from "../../lib/conversas-fns.ts";
 import { listMissoes } from "../../lib/missions-fns.ts";
 import { abrirConversaNova, contatosDoWhatsApp, telefoneComDdi } from "../../lib/whatsapp-aparelho-fns.ts";
+import type { Mencao } from "../../lib/nomes-whatsapp.ts";
 import { BotaoEmojis } from "./Emojis.tsx";
 import { EscolherFundo, estiloDoFundo, useFundoDaConversa } from "./FundoConversa.tsx";
 import { MAX_SEGUNDOS_VOZ, relogio, useGravador } from "./gravador.ts";
@@ -859,7 +860,31 @@ function inicioDaSequencia(itens: Array<{ k: string; m?: MensagemWhatsApp }>, i:
   return (antes.autorId ?? antes.autor) !== (atual.autorId ?? atual.autor);
 }
 
-function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo: boolean; chatId?: string; /** Primeira de uma sequência da mesma pessoa (grupo: nome e foto). */ inicio?: boolean }) {
+/** Marcação clicada: abre (ou cria) a conversa com a pessoa no mesmo número. */
+async function abrirConversaDaMencao(numberId: string, m: Mencao) {
+  if (!m.telefone) return;
+  try {
+    const r = await abrirConversaNova({ data: { numberId, telefone: m.telefone, nome: null } });
+    window.dispatchEvent(new CustomEvent("omni:abrir-conversa", { detail: r.chatId }));
+  } catch (e) {
+    window.alert(e instanceof Error && e.message ? e.message : "Não deu para abrir a conversa. Tente de novo.");
+  }
+}
+
+function Balao({
+  m,
+  grupo,
+  chatId,
+  numberId,
+  inicio = true,
+}: {
+  m: MensagemWhatsApp;
+  grupo: boolean;
+  chatId?: string;
+  /** Número da conversa (marcação clicada abre a conversa com a pessoa nele). */
+  numberId?: string;
+  /** Primeira de uma sequência da mesma pessoa (grupo: nome e foto). */ inicio?: boolean;
+}) {
   if (m.chamada) return <LinhaDeChamada m={m} />;
   const comAutor = grupo && !m.deMim;
   const acoes = useAcoes();
@@ -920,7 +945,14 @@ function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo
           </p>
         )}
         {!m.apagada && m.tipo === "texto" && primeiroLink(m.texto) && <PreviaDoLink url={primeiroLink(m.texto)!} deMim={m.deMim && !m.ensaio} />}
-        {!m.apagada && m.texto && <TextoComLinks texto={m.texto} deMim={m.deMim && !m.ensaio} />}
+        {!m.apagada && m.texto && (
+          <TextoComLinks
+            texto={m.texto}
+            deMim={m.deMim && !m.ensaio}
+            mencoes={m.mencoes}
+            onMencao={numberId ? (x) => void abrirConversaDaMencao(numberId, x) : undefined}
+          />
+        )}
         <p
           className={`mt-0.5 flex items-center justify-end gap-1 text-[11px] ${m.deMim && !m.ensaio ? "text-white/70" : "text-muted"}`}
         >
@@ -1219,7 +1251,7 @@ export function PainelConversa({
               )}
               {rolagem.divisor?.id === item.id && <AvisoNaoLidas n={rolagem.divisor.n} />}
               {item.k === "wa" ? (
-                <Balao m={item.m} grupo={conversa.grupo} chatId={conversa.id} inicio={inicioDaSequencia(itens, i, novoDia)} />
+                <Balao m={item.m} grupo={conversa.grupo} chatId={conversa.id} numberId={conversa.numero.id} inicio={inicioDaSequencia(itens, i, novoDia)} />
               ) : (
                 <CartaoEmail e={item.e} onAbrir={(id) => contato?.onAbrirEmail(id)} />
               )}

@@ -3,6 +3,12 @@
 # O patch evita que o Baileys anuncie presença em atualizações parciais de
 # credencial, o que tirava as notificações do celular do dono do número.
 FROM evoapicloud/evolution-api:v2.3.7@sha256:1bd8afc4a6cf48822e6cf02469aeae7bd35a12a6b616eacd1291926307f4d339
+# CVE-2026-48063 (Baileys < 7.0.0-rc12): a trava da correção aplicada no rc.9.
+COPY patch-cve-2026-48063.mjs cve-2026-48063.test.mjs /tmp/omni-cve/
+RUN node /tmp/omni-cve/patch-cve-2026-48063.mjs \
+    && node --check /evolution/node_modules/baileys/lib/Utils/process-message.js \
+    && node /tmp/omni-cve/cve-2026-48063.test.mjs \
+    && rm -r /tmp/omni-cve
 COPY patch-presence.mjs presence.test.mjs /tmp/omni-presence/
 RUN node /tmp/omni-presence/patch-presence.mjs \
     && node --check /evolution/node_modules/baileys/lib/Socket/socket.js \

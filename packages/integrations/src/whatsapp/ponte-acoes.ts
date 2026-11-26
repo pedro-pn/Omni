@@ -68,6 +68,16 @@ export class PonteDeAcoes {
     };
   }
 
+  /** Marcações: o telefone (só dígitos) por trás de cada @lid, pelo que a sessão já sabe, e o @lid do próprio número. */
+  async lids(telefone: string, lids: string[]): Promise<{ mapa: Record<string, string | null>; eu: string | null }> {
+    const d = await this.chamar({ telefone, acao: "lids", lids }, 5_000);
+    const r = z
+      .object({ mapa: z.record(z.string().regex(/^\d{5,20}@lid$/), z.string().regex(/^\d{8,15}$/).nullable()), eu: z.string().regex(/^\d{5,20}@lid$/).nullable() })
+      .safeParse(d);
+    if (!r.success) throw new WhatsAppError("Resposta inesperada da ponte", 502);
+    return r.data;
+  }
+
   salvarContato(telefone: string, jid: string, nome: string) {
     return this.chamar({ telefone, acao: "contato", jid, nome }).then(() => undefined);
   }

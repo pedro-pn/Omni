@@ -137,6 +137,23 @@ export class PonteDeAcoes {
         if ((!PESSOA.test(jid) && !GRUPO.test(jid)) || !ID.test(String(corpo.id ?? ''))) throw Object.assign(new Error('dados_invalidos'), { status: 400 });
         await l.sock.chatModify({ star: { messages: [{ id: corpo.id, fromMe: corpo.fromMe === true }], star: corpo.favorita === true } }, jid);
         return { ok: true };
+      case 'lids': {
+        // Marcações nos grupos: o telefone por trás de cada @lid, pelo mapeamento que o Baileys
+        // já guardou na sessão (nada é perguntado ao WhatsApp), e o meu @lid.
+        const lids = Array.isArray(corpo.lids) ? corpo.lids.filter((x) => typeof x === 'string' && /^\d{5,20}@lid$/.test(x)).slice(0, 100) : null;
+        if (!lids) throw Object.assign(new Error('dados_invalidos'), { status: 400 });
+        const mapa = {};
+        for (const lid of lids) {
+          let pn = null;
+          try {
+            pn = await l.sock.signalRepository?.lidMapping?.getPNForLID(lid);
+          } catch {}
+          const d = digitos(String(pn ?? '').split(':')[0].split('@')[0]);
+          mapa[lid] = String(pn ?? '').endsWith('@s.whatsapp.net') && d.length >= 8 && d.length <= 15 ? d : null;
+        }
+        const eu = digitos(String(l.sock.authState?.creds?.me?.lid ?? '').split(':')[0].split('@')[0]);
+        return { mapa, eu: eu ? `${eu}@lid` : null };
+      }
       case 'fixar-mensagem': {
         if ((!PESSOA.test(jid) && !GRUPO.test(jid)) || !ID.test(String(corpo.id ?? ''))) throw Object.assign(new Error('dados_invalidos'), { status: 400 });
         const participante = typeof corpo.participante === 'string' && PESSOA.test(corpo.participante) ? corpo.participante : undefined;

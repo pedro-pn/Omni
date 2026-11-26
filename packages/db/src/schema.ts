@@ -1088,6 +1088,8 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   forwarded: boolean("forwarded").notNull().default(false),
   editedAt: timestamp("edited_at", { withTimezone: true }),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  /** 0089: quem foi marcado (JIDs de contextInfo.mentionedJid). */
+  mentions: text("mentions").array().notNull().default(sql`'{}'::text[]`),
 });
 
 /** Conversas concluídas por pessoa (0035): voltam quando chega mensagem nova do contato. */

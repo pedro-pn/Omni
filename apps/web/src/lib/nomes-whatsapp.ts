@@ -56,3 +56,25 @@ export function nomeDoAutor(autorJid: string | null, nomePerfil: string | null, 
   if (salvo) return { autor: salvo, perfil: null };
   return telefone ? { autor: telefone, perfil: nomePerfil } : { autor: nomePerfil ? `~ ${nomePerfil}` : null, perfil: null };
 }
+
+/** Uma marcação na mensagem: o "@<chave>" do texto, o nome a mostrar e o telefone (abre a conversa). */
+export type Mencao = { chave: string; nome: string; telefone: string | null; eu: boolean };
+
+/**
+ * O nome de quem foi marcado, pela mesma regra dos autores: salvo na agenda → o nome salvo; não
+ * salvo → o número ("~ perfil" sem número). Sem a agenda lida, o nome da conversa ou o de perfil.
+ * Sem nada (um @lid que a sessão não conhece), null: o texto fica como veio.
+ */
+export function nomeDaMencao(
+  m: { jid: string; telefone: string | null; eu: boolean; nomeDaConversa: string | null; nomeManual: boolean; perfil: string | null },
+  agenda: Agenda | null,
+): Mencao | null {
+  const chave = m.jid.split("@")[0]!;
+  if (m.eu) return { chave, nome: "Você", telefone: null, eu: true };
+  const telefone = formatarTelefone(m.telefone);
+  let nome: string | null;
+  if (m.nomeManual && m.nomeDaConversa) nome = m.nomeDaConversa;
+  else if (agenda) nome = nomeSalvo(agenda, m.jid, m.telefone) ?? telefone ?? (m.perfil ? `~ ${m.perfil}` : null);
+  else nome = m.nomeDaConversa ?? m.perfil ?? telefone;
+  return nome ? { chave, nome, telefone: m.telefone, eu: false } : null;
+}
