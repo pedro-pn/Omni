@@ -258,6 +258,10 @@ curl -s -o /dev/null -w '%{http_code}\n' http://172.17.0.1:8087/internal/control
 # e volta automática se a versão nova não responder (registro em ~/omni-publicacoes.log)
 deploy/publicar.sh staging            # ou: deploy/publicar.sh producao
 # Antes de publicar, o script faz uma cópia local do banco em ~/backups/<projeto> (deploy/backup.sh).
+# WhatsApp: a Evolution (perfil whatsapp) e o serviço de voz (perfil chamadas) entram só se já
+# rodam no ambiente e se mudaram (código deles entre as versões, ou imagem do compose diferente da
+# que está rodando). Build junto com o do web; troca depois da conferência (o número cai alguns
+# segundos e reconecta sozinho). Forçar: deploy/publicar.sh producao --recriar-whatsapp
 
 # Logs, reiniciar, parar
 omni-stg logs -f --tail 100 web worker

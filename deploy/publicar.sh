@@ -7,11 +7,15 @@
 #   deploy/publicar.sh producao <commit>       # publica um commit específico (ex.: voltar versão)
 #   deploy/publicar.sh producao --sem-backup   # pula a cópia local do banco (só em emergência)
 #   deploy/publicar.sh producao --encerrar-manutencao   # publica durante a manutenção manual e a encerra
+#   deploy/publicar.sh producao --recriar-whatsapp      # reconstrói também a Evolution e o serviço de voz
 #   OMNI_DIR=~/apps/Omni sh /tmp/publicar.sh producao   # rodando de uma cópia do script
 #
 # Passos: confere a árvore limpa → backup do banco → guarda as imagens atuais → leva o código ao
 # commit pedido → build com a versão → migrations → web e worker → confere /api/saude (status ok e
-# versão nova). Se a conferência falhar, volta o código e as imagens anteriores e sai com erro.
+# versão nova) → WhatsApp: Evolution (perfil whatsapp) e serviço de voz (perfil chamadas), só se já
+# rodam neste ambiente e só se o código deles mudou ou a imagem do compose é outra (o build vai junto
+# com o do web, antes de qualquer troca; a troca, depois da conferência). Se a conferência falhar,
+# volta o código e as imagens anteriores e sai com erro.
 # As migrations só avançam: se a versão nova aplicou migration, a volta avisa e o banco precisa ser
 # restaurado do backup feito no passo 2 (docs/producao/deploy.md, "Voltar uma versão").
 set -eu
@@ -21,10 +25,12 @@ shift
 ALVO="origin/master"
 BACKUP=sim
 ENCERRAR_MANUTENCAO=nao
+RECRIAR_WHATSAPP=nao
 for arg in "$@"; do
   case "$arg" in
     --sem-backup) BACKUP=nao ;;
     --encerrar-manutencao) ENCERRAR_MANUTENCAO=sim ;;
+    --recriar-whatsapp) RECRIAR_WHATSAPP=sim ;;
     *) ALVO="$arg" ;;
   esac
 done
@@ -110,8 +116,45 @@ voltar() {
 # 4–6. Código, build com a versão, migrations e serviços.
 git checkout --quiet --detach "$NOVO"
 export OMNI_VERSAO="$NOVO"
+
+# WhatsApp (perfis do compose, que o "up" sem perfil não toca): Evolution e serviço de voz entram
+# só se já rodam aqui e se mudaram — código entre as versões, imagem pedida no compose diferente da
+# que está rodando, ou --recriar-whatsapp.
+EXTRAS=""
+PERFIS=""
+mudou_extra() { # serviço, prefixo da imagem, perfis ("--profile …"), caminhos…
+  svc="$1"; prefixo="$2"; perfis="$3"; shift 3
+  id="$($COMPOSE $perfis ps -q "$svc" 2>/dev/null || true)"
+  [ -n "$id" ] || return 1
+  [ "$RECRIAR_WHATSAPP" = sim ] && return 0
+  git diff --quiet "$ANTERIOR" "$NOVO" -- "$@" || return 0
+  # A lista traz também as dependências (Redis, Postgres): só a imagem do próprio serviço.
+  pedida="$($COMPOSE $perfis config --images "$svc" 2>/dev/null | grep "^${prefixo}:" | head -1)"
+  rodando="$(docker inspect -f '{{.Config.Image}}' "$id" 2>/dev/null || true)"
+  [ -n "$pedida" ] && [ "$pedida" != "$rodando" ]
+}
+# O serviço de voz depende da Evolution: os comandos dele levam os dois perfis.
+if mudou_extra evolution omni-evolution "--profile whatsapp" deploy/evolution experiments/whatsapp-chamada/evolution-bridge; then
+  EXTRAS="$EXTRAS evolution"; PERFIS="--profile whatsapp"
+fi
+if mudou_extra voz omni-chamadas-voz "--profile whatsapp --profile chamadas" experiments/whatsapp-chamada ':(exclude)experiments/whatsapp-chamada/evolution-bridge'; then
+  EXTRAS="$EXTRAS voz"; PERFIS="--profile whatsapp --profile chamadas"
+fi
+
 if ! $COMPOSE build migrate web worker; then registrar "falhou: build"; git checkout --quiet --detach "$ANTERIOR"; exit 1; fi
+if [ -n "$EXTRAS" ] && ! $COMPOSE $PERFIS build $EXTRAS; then registrar "falhou: build de${EXTRAS}"; git checkout --quiet --detach "$ANTERIOR"; exit 1; fi
 $COMPOSE up -d --wait || voltar
+
+# WhatsApp depois do web conferido: o número cai por alguns segundos e reconecta sozinho (sem QR).
+atualizar_whatsapp() {
+  [ -n "$EXTRAS" ] || return 0
+  if $COMPOSE $PERFIS up -d --no-deps $EXTRAS; then
+    registrar "atualizado:${EXTRAS}"
+  else
+    registrar "ATENÇÃO: falhou ao subir${EXTRAS}; o WhatsApp pode estar fora (docker compose${PERFIS} up -d${EXTRAS})"
+    return 1
+  fi
+}
 
 # 7. Conferência: a versão nova responde e o banco está ok.
 i=0
@@ -121,6 +164,7 @@ while [ $i -lt 30 ]; do
     *'"status":"ok"'*"\"versao\":\"${NOVO}\""*)
       registrar "publicado ${CURTO_NOVO} (saúde ok)"
       if [ -f "$SINAL" ]; then rm -f "$SINAL"; registrar "manutenção encerrada pela publicação"; fi
+      atualizar_whatsapp || exit 1
       exit 0 ;;
   esac
   i=$((i + 1))
