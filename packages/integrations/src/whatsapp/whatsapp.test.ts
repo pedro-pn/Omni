@@ -286,7 +286,7 @@ describe("ponte de ações", () => {
       return new Response(JSON.stringify(r.corpo), { status: r.status });
     }) as unknown as typeof fetch;
     const p = new PonteDeAcoes({ url: "http://evolution:8099", token: "t".repeat(40), fetch: f });
-    expect(await p.contatos("5547900000001")).toEqual([{ jid: "5547900000011@s.whatsapp.net", lid: null, telefone: "5547900000011@s.whatsapp.net", nome: "Ana" }]);
+    expect((await p.contatos("5547900000001")).contatos).toEqual([{ jid: "5547900000011@s.whatsapp.net", lid: null, telefone: "5547900000011@s.whatsapp.net", nome: "Ana" }]);
     expect(pedidos[0]).toEqual({ url: "http://evolution:8099/v1/acoes", corpo: { telefone: "5547900000001", acao: "contatos", recarregar: false }, auth: `Bearer ${"t".repeat(40)}` });
     await expect(p.salvarContato("5547900000001", "5547900000011@s.whatsapp.net", "Ana")).rejects.toMatchObject({ status: 409, code: "linha_indisponivel" });
     expect(() => new PonteDeAcoes({ url: "https://evolution:8099", token: "t".repeat(40) })).toThrow();

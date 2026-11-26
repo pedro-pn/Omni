@@ -13,7 +13,7 @@ function sessao(telefone) {
   const sock = {
     ws: { isOpen: true },
     ev,
-    authState: { creds: { me: { id: `${telefone}:12@s.whatsapp.net` } }, keys: { set: async (v) => Object.assign(chaves, v) } },
+    authState: { creds: { me: { id: `${telefone}:12@s.whatsapp.net` } }, keys: { set: async (v) => Object.assign(chaves, v), get: async () => ({ critical_unblock_low: { version: 42 } }) } },
     resyncAppState: async (colecoes, inicial) => {
       chamadas.push(['resync', colecoes, inicial]);
       // O snapshot da agenda: um salvo, um removido e um "nome" que é só o número.
@@ -37,10 +37,13 @@ test('agenda: só o nome salvo (name), não o de perfil (notify); a primeira lei
   const r = await p.executar({ telefone: '5547900000001', acao: 'contatos' });
   assert.deepEqual(r.contatos, [{ jid: '5547900000011@s.whatsapp.net', lid: null, telefone: '5547900000011@s.whatsapp.net', nome: 'Ana Campo' }]);
   assert.deepEqual(s.chaves, { 'app-state-sync-version': { critical_unblock_low: null } });
+  assert.deepEqual(r.diagnostico, { versaoDaColecao: 42, eventosNaLeitura: 2, comNomeNaLeitura: 2, eventosDesdeOInicio: 3, salvosEmMemoria: 1 });
+  // Histórico do pareamento também conta.
+  s.ev.emit('messaging-history.set', { contacts: [{ id: '5547900000015@s.whatsapp.net', name: 'Dani' }] });
   assert.deepEqual(s.chamadas[0], ['resync', ['critical_unblock_low'], true]);
   // Contato apagado no celular sai da agenda.
   s.ev.emit('contacts.upsert', [{ id: '5547900000011@s.whatsapp.net', name: undefined }]);
-  assert.equal((await p.executar({ telefone: '5547900000001', acao: 'contatos' })).contatos.length, 0);
+  assert.deepEqual((await p.executar({ telefone: '5547900000001', acao: 'contatos' })).contatos.map((c) => c.nome), ['Dani']);
   assert.equal(s.chamadas.filter((c) => c[0] === 'resync').length, 1); // não baixa de novo
 });
 

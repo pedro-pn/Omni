@@ -10,6 +10,8 @@ import { WhatsAppError } from "./tipos.ts";
  */
 
 export type ContatoSalvo = { jid: string; lid: string | null; telefone: string | null; nome: string };
+/** O que o WhatsApp mandou na leitura (o Baileys não devolve erro quando a coleção falha). */
+export type DiagnosticoDaAgenda = Record<string, number | null>;
 
 const contatoSchema = z.object({ jid: z.string().max(80), lid: z.string().max(80).nullable(), telefone: z.string().max(80).nullable(), nome: z.string().min(1).max(120) });
 
@@ -39,15 +41,18 @@ export class PonteDeAcoes {
     return dados;
   }
 
-  /** Os contatos salvos na agenda do celular deste número (a primeira leitura baixa a agenda de novo). */
-  async contatos(telefone: string, recarregar = false): Promise<ContatoSalvo[]> {
+  /** Os contatos salvos na agenda do celular deste número (a primeira leitura baixa a agenda de novo) e o diagnóstico. */
+  async contatos(telefone: string, recarregar = false): Promise<{ contatos: ContatoSalvo[]; diagnostico: DiagnosticoDaAgenda | null }> {
     const d = await this.chamar({ telefone, acao: "contatos", recarregar }, 90_000);
-    const lista = z.object({ contatos: z.array(z.unknown()) }).safeParse(d);
+    const lista = z.object({ contatos: z.array(z.unknown()), diagnostico: z.record(z.string(), z.number().nullable()).optional() }).safeParse(d);
     if (!lista.success) throw new WhatsAppError("Resposta inesperada da ponte", 502);
-    return lista.data.contatos.flatMap((c) => {
-      const p = contatoSchema.safeParse(c);
-      return p.success ? [p.data] : [];
-    });
+    return {
+      contatos: lista.data.contatos.flatMap((c) => {
+        const p = contatoSchema.safeParse(c);
+        return p.success ? [p.data] : [];
+      }),
+      diagnostico: lista.data.diagnostico ?? null,
+    };
   }
 
   salvarContato(telefone: string, jid: string, nome: string) {
