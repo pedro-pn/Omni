@@ -31,3 +31,4 @@ export * from "./modulos.ts";
 export * from "./erros.ts";
 export * from "./limites.ts";
 export * from "./desempenho.ts";
+export * from "./incidentes.ts";

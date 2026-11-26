@@ -1556,3 +1556,30 @@ export const estadoOperacao = pgTable("estado_operacao", {
   valor: jsonb("valor").$type<Record<string, unknown>>().notNull(),
   atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------- 0086: registro de incidentes (E21)
+
+/** Incidentes com causa e correção (Administração → Incidentes, só admin; sem DELETE). */
+export const incidentes = pgTable("incidentes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  titulo: text("titulo").notNull(),
+  tipo: text("tipo", { enum: ["indisponibilidade", "dados", "seguranca", "integracao", "erro", "outro"] }).notNull(),
+  gravidade: text("gravidade", { enum: ["baixa", "media", "alta"] }).notNull(),
+  inicio: timestamp("inicio", { withTimezone: true }).notNull(),
+  conhecidoEm: timestamp("conhecido_em", { withTimezone: true }).notNull(),
+  resolvidoEm: timestamp("resolvido_em", { withTimezone: true }),
+  oQueAconteceu: text("o_que_aconteceu").notNull(),
+  impacto: text("impacto"),
+  dadosPessoais: boolean("dados_pessoais").notNull().default(false),
+  titulares: text("titulares"),
+  acoes: text("acoes"),
+  causa: text("causa"),
+  correcao: text("correcao"),
+  comunicacoes: text("comunicacoes"),
+  referencias: text("referencias"),
+  status: text("status", { enum: ["aberto", "resolvido", "encerrado"] }).notNull().default("aberto"),
+  criadoPor: uuid("criado_por").notNull().references(() => people.id),
+  criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  atualizadoPor: uuid("atualizado_por").references(() => people.id),
+  atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
+});

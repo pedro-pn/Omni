@@ -41,6 +41,7 @@ as que já estavam inativas em 26/11/2026 receberam a última atualização vind
 | Tarefas pessoais (caixa própria, fora de projeto) e anexos | 2 anos depois da desativação da pessoa (`people.deactivated_at`, marcado por gatilho) | apaga; anexos apagados de vez pelo worker |
 | Transcrições e resumos das ligações | seguem a gravação (5 anos) | já em vigor |
 | Tarefas de projetos, comentários e histórico | mantidos (são do projeto) | — |
+| Registro de incidentes (`incidentes`, E21) | mantido (no mínimo 5 anos, Resolução CD/ANPD nº 15/2024; sem nomes no texto) | — |
 
 **Arquivos no SharePoint:** a função não apaga direto. Ela põe o drive e o item de cada arquivo
 vencido em `arquivos_para_apagar`, na mesma transação, e o job `retencao` apaga de vez
