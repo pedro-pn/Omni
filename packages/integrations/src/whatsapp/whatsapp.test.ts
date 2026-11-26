@@ -94,6 +94,7 @@ describe("eventos do webhook", () => {
       em: new Date(1793800000 * 1000),
       citada: null,
       encaminhada: false,
+      mencoes: [],
     });
     expect(JSON.stringify(e)).not.toContain("segredo-da-instancia");
   });
@@ -249,6 +250,14 @@ describe("ações nas mensagens pelo webhook (0087)", () => {
     expect(e).toMatchObject({ tipo: "mensagem", texto: "Pode", citada: { id: "M1", texto: "Posso ir amanhã?", autorJid: "5547900000011@s.whatsapp.net" }, encaminhada: true });
     const [foto] = upsert({ conversation: "ok", extendedTextMessage: undefined, imageMessage: undefined, contextInfo: undefined });
     expect(foto).toMatchObject({ citada: null, encaminhada: false });
+  });
+
+  it("marcações no grupo: os JIDs de mentionedJid, sem repetir e só de pessoa", () => {
+    const [e] = upsert(
+      { extendedTextMessage: { text: "@222222222222222 e @5547900000012, olhem", contextInfo: { mentionedJid: ["222222222222222@lid", "5547900000012@s.whatsapp.net", "222222222222222@lid", "120363000000000001@g.us", 7] } } },
+      { remoteJid: "120363000000000001@g.us", participant: "5547900000011@s.whatsapp.net" },
+    );
+    expect(e).toMatchObject({ tipo: "mensagem", mencoes: ["222222222222222@lid", "5547900000012@s.whatsapp.net"] });
   });
 
   it("reação (e tirar a reação), num grupo com o participante", () => {

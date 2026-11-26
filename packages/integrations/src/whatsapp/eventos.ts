@@ -34,6 +34,8 @@ export type EventoWhatsApp =
       /** Resposta: a mensagem citada (id no WhatsApp, um trecho e quem escreveu). */
       citada?: { id: string; texto: string | null; autorJid: string | null } | null;
       encaminhada?: boolean;
+      /** Quem foi marcado (contextInfo.mentionedJid): o texto traz "@<número>" desses JIDs. */
+      mencoes?: string[];
     }
   /** Reação a uma mensagem (emoji vazio = tirou). */
   | { tipo: "reacao"; instancia: string; chatJid: string; lid: string | null; alvoId: string; deMim: boolean; autorJid: string | null; autorNome: string | null; emoji: string; em: Date }
@@ -144,6 +146,7 @@ function mensagem(instancia: string, dados: unknown): Extract<EventoWhatsApp, { 
     tipo: "mensagem",
     citada: ctx.citada,
     encaminhada: ctx.encaminhada,
+    mencoes: ctx.mencoes,
     instancia,
     chatJid: pessoa?.jid ?? k.remoteJid,
     lid: pessoa?.lid ?? null,
@@ -159,7 +162,11 @@ function mensagem(instancia: string, dados: unknown): Extract<EventoWhatsApp, { 
 }
 
 /** contextInfo de qualquer tipo de mensagem: a citada (resposta) e se foi encaminhada. */
-function contextoDaMensagem(bruta: Record<string, unknown>): { citada: { id: string; texto: string | null; autorJid: string | null } | null; encaminhada: boolean } {
+function contextoDaMensagem(bruta: Record<string, unknown>): {
+  citada: { id: string; texto: string | null; autorJid: string | null } | null;
+  encaminhada: boolean;
+  mencoes: string[];
+} {
   const m = desembrulhar(bruta);
   for (const v of Object.values(m)) {
     const ctx = o(o(v).contextInfo);
@@ -171,9 +178,12 @@ function contextoDaMensagem(bruta: Record<string, unknown>): { citada: { id: str
     return {
       citada: id ? { id, texto: (c?.texto ?? rotulo)?.slice(0, 300) ?? null, autorJid: pessoaValida(s(ctx.participant)) } : null,
       encaminhada: ctx.isForwarded === true,
+      mencoes: Array.isArray(ctx.mentionedJid)
+        ? [...new Set(ctx.mentionedJid.flatMap((j) => (typeof j === "string" && /^\d{5,20}@(s\.whatsapp\.net|lid)$/.test(j) ? [j] : [])))].slice(0, 50)
+        : [],
     };
   }
-  return { citada: null, encaminhada: false };
+  return { citada: null, encaminhada: false, mencoes: [] };
 }
 
 /**

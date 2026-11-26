@@ -11,7 +11,8 @@ import { personIdFromRequest } from "../server/session.ts";
 import { enviarPeloWhatsApp } from "../server/whatsapp-envio.ts";
 import { enderecoDoProxy } from "../server/email-imagem.ts";
 import { previaDoEndereco, type PreviaDeLink } from "../server/link-previa.ts";
-import { montarAgenda, nomeDaConversa, nomeDoAutor, type Agenda } from "./nomes-whatsapp.ts";
+import { montarAgenda, nomeDaConversa, nomeDoAutor, type Agenda, type Mencao } from "./nomes-whatsapp.ts";
+import { mencoesDasMensagens } from "../server/mencoes.ts";
 import { ErroParaTela } from "./erros.ts";
 import { resumoDaChamada } from "./chamadas-fns.ts";
 import { exigirModulo } from "../server/modulos.ts";
@@ -75,6 +76,8 @@ export type MensagemWhatsApp = {
   /** Resposta: a mensagem citada (id, trecho e quem escreveu, JID). */
   citada?: { waId: string; texto: string | null; autorId: string | null } | null;
   encaminhada?: boolean;
+  /** Marcações: o "@<chave>" do texto vira o nome (clicável para abrir a conversa com a pessoa). */
+  mencoes?: Mencao[];
   editada?: boolean;
   /** Apagada para todos (o conteúdo já saiu do Omni). */
   apagada?: boolean;
@@ -295,10 +298,19 @@ export const mensagensDaConversa = createServerFn({ method: "GET" })
         .from(schema.whatsappChats)
         .where(eq(schema.whatsappChats.id, data.chatId));
       // Grupo: quem escreveu pelo nome salvo na agenda do celular; senão o número e o nome de perfil (0088).
-      if (conversa?.grupo) {
+      const comMencao = linhas.some((x) => x.mentions.length);
+      if (conversa && (conversa.grupo || comMencao)) {
         const [num] = await db.select({ lida: schema.whatsappNumbers.contactsSyncedAt }).from(schema.whatsappNumbers).where(eq(schema.whatsappNumbers.id, conversa.numberId));
         const agenda = num?.lida ? ((await agendasDosNumeros(db, [conversa.numberId])).get(conversa.numberId) ?? null) : null;
-        if (agenda) {
+        // Marcações (0089): o @lid ou @número do texto vira o nome.
+        if (comMencao) {
+          const mencoes = await mencoesDasMensagens(db, conversa, linhas, agenda);
+          for (const msg of todas) {
+            const ms = mencoes.get(msg.id);
+            if (ms) msg.mencoes = ms;
+          }
+        }
+        if (agenda && conversa.grupo) {
           const perfis = new Map(linhas.map((x) => [x.id, x.authorName]));
           for (const msg of todas) {
             if (msg.deMim || !msg.autorId) continue;

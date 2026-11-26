@@ -33,9 +33,10 @@ export const Route = createFileRoute("/api/whatsapp/webhook")({
         try {
           for (const e of lerEventoWebhook(corpo)) {
             if (e.tipo === "mensagem") {
-              await pool.query("SELECT app.whatsapp_registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)", [
+              await pool.query("SELECT app.whatsapp_registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)", [
                 e.instancia, e.chatJid, e.lid, e.grupo, e.telefone, e.id, e.deMim, e.autorJid, e.autorNome, e.conteudo, e.texto, e.arquivo, e.em,
                 e.citada?.id ?? null, e.citada?.texto ?? null, e.citada?.autorJid ?? null, e.encaminhada ?? false,
+                e.mencoes ?? [],
               ]);
             } else if (e.tipo === "status") {
               await pool.query("SELECT app.whatsapp_registrar_status($1, $2, $3, $4)", [e.instancia, e.chatJid, e.id, e.status]);
