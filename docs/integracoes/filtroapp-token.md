@@ -50,6 +50,11 @@ Mantenha `rdo.relatorios.read`, `rdo.relatorios.todos.read` e `colaboradores.ope
 |---|---|---|
 | Omni – desenvolvimento | **`SIMULATE`** (toda escrita é simulada, mesmo sem o cabeçalho) | `simulada` |
 | Omni – produção | `LIVE` | `real` |
+| Omni – staging (26/11/2026) | **`SIMULATE`** | `simulada` (a validação recusa `real` fora da produção) |
+
+**Token do staging:** os mesmos escopos de leitura da produção (todos os listados neste arquivo), as duas
+escritas (`qualidade.registros.create`, `logistica.descargas.create`) só porque o modo é `SIMULATE`,
+projetos Todos, IP da VPS, 90 dias. Nunca reaproveitar o token da produção.
 
 Verificado em 29/10/2026: com o token de desenvolvimento, a produção respondeu `Preference-Applied: validate-only` mesmo sem o cabeçalho, e um desvio simulado completo não criou nenhum registro de Qualidade.
 
@@ -67,7 +72,8 @@ Verificado em 29/10/2026: com o token de desenvolvimento, a produção respondeu
 | Ambiente | Arquivo | Variável |
 |---|---|---|
 | Desenvolvimento | `.env` na raiz do Omni (`/home/relat/apps/omni/.env`) | `FILTROAPP_API_TOKEN=` |
-| Produção | `deploy/.env.production` na VPS | `FILTROAPP_API_TOKEN=` |
+| Produção | `deploy/.env.production` na VPS (`~/apps/Omni`) | `FILTROAPP_API_TOKEN=` |
+| Staging | `deploy/.env.staging` na VPS (`~/apps/Omni-staging`) | `FILTROAPP_API_TOKEN=` |
 
 `FILTROAPP_API_URL` já vem preenchida com `https://app.filtrovali.com.br/api/integracoes/v1`. Os dois arquivos estão no `.gitignore`.
 

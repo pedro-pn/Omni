@@ -156,7 +156,14 @@ No `~/apps/Omni-staging/deploy/.env.staging`, alinhe com o `deploy/staging.env.e
 - `FILTROAPP_API_TOKEN`: o token novo "Omni – staging" (o antigo foi revogado: responde 401);
 - IA: `OPENAI_API_KEY=` vazio e todas as `IA_*=desligada`;
 - WhatsApp: as quatro `WHATSAPP_*` e `EVOLUTION_POSTGRES_PASSWORD` vazias, `CHAMADAS_HABILITADAS=off`;
-- `CSP_MODO=aplicar`, `OPERACAO_STATUS=desligado`.
+- `CSP_MODO=aplicar`, `OPERACAO_STATUS=desligado`;
+- `GRAPH_PRIVATE_KEY_PATH=/run/secrets/omni/omni-graph.key` (o caminho **de dentro do contêiner**; o
+  arquivo antigo tinha o da máquina de desenvolvimento e o worker caía em loop com `ENOENT`).
+
+Feito em 26/11/2026: staging em `~/apps/Omni-staging` (cópia do arquivo antigo em
+`~/env.staging.antigo-20261126`), publicado na 615493e; o banco antigo recebeu as 51 migrations que
+faltavam e a primeira sincronização trouxe as 89 missões do filtroAPP. A regra do firewall para a
+8085 precisou ser criada (§4.1).
 
 Depois suba o banco (o publicar.sh faz backup dele antes de tudo) e publique pela pasta nova:
 
