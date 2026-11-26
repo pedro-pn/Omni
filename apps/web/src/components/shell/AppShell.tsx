@@ -1,5 +1,5 @@
 import { BellRing, ChartColumn, Download, Inbox, KeyRound, ListChecks, LogOut, type LucideIcon, Mail, MessageCircle, Moon, Phone, Search, Settings, ShieldCheck, Smartphone, Sun, Target, Users } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
@@ -169,6 +169,7 @@ export function AppShell({ me }: { me: Me }) {
   const [missaoId, setMissaoId] = useState<string | null>(null);
   const [conversaId, setConversaId] = useState<string | null>(null);
   const [centroEmail, setCentroEmail] = useState<CentroEmail | null>(null);
+  const qcShell = useQueryClient();
   const [abaMissao, setAbaMissao] = useState("resumo");
   const [vistaTarefas, setVistaTarefas] = useState<VistaTarefas | null>(null);
   const [tarefaDoAviso, setTarefaDoAviso] = useState<string | null>(null);
@@ -232,6 +233,20 @@ export function AppShell({ me }: { me: Me }) {
     return () => camada.registrar(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // "Conversar em particular" (mensagem de grupo): abre a conversa com a pessoa.
+  useEffect(() => {
+    const abrir = (e: Event) => {
+      const chatId = (e as CustomEvent<string>).detail;
+      if (typeof chatId !== "string") return;
+      setView("conversas");
+      setCentroEmail(null);
+      setConversaId(chatId);
+      void qcShell.invalidateQueries({ queryKey: ["whatsapp", "conversas"] });
+    };
+    window.addEventListener("omni:abrir-conversa", abrir);
+    return () => window.removeEventListener("omni:abrir-conversa", abrir);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => camada.definirVisivel(view === "chamadas"), [camada, view]);
   const perdidas = useChamadasPerdidas(me.id);
   // App instalável: service worker e convite de instalação; se o navegador trocar a inscrição, inscreve de novo.
@@ -252,7 +267,9 @@ export function AppShell({ me }: { me: Me }) {
   });
   const missao = view === "missoes" ? (missoes.data?.find((m) => m.id === missaoId) ?? null) : null;
   const naTudo = view === "tudo" && !semAcesso;
-  const conversas = useConversas((view === "conversas" || naTudo) && !semAcesso && liberado("whatsapp"));
+  // Sempre ligada (com o módulo): a contagem de não lidas vai para o título da aba (como no WhatsApp Web).
+  const conversas = useConversas(!semAcesso && liberado("whatsapp"));
+  useNaoLidasNoTitulo(conversas.data);
   const correspondentes = useCorrespondentes(naTudo || (view === "conversas" && !semAcesso));
   const agenda = useAgenda(conversas.data, correspondentes.data, (naTudo || view === "conversas") && !semAcesso);
   const contatosUnicos = juntarContatos(conversas.data ?? [], correspondentes.data ?? [], agenda.data ?? []);
@@ -670,3 +687,27 @@ export function AppShell({ me }: { me: Me }) {
     </div>
   );
 }
+
+/**
+ * "(3) Omni" no título da aba, como o WhatsApp Web: quantas conversas têm mensagem não lida
+ * (sem as arquivadas). O título de cada tela muda na navegação; o prefixo volta sozinho. No app
+ * instalado, o número também aparece no ícone (Badging API, onde houver).
+ */
+function useNaoLidasNoTitulo(conversas: { naoLidas: number; marcadaNaoLida: boolean; concluida: boolean }[] | undefined) {
+  const n = (conversas ?? []).filter((c) => !c.concluida && (c.naoLidas > 0 || c.marcadaNaoLida)).length;
+  useEffect(() => {
+    const aplicar = () => {
+      const base = document.title.replace(/^\(\d+\+?\)\s*/, "");
+      const novo = n > 0 ? `(${n > 99 ? "99+" : n}) ${base}` : base;
+      if (document.title !== novo) document.title = novo;
+    };
+    aplicar();
+    const titulo = document.querySelector("title");
+    const mo = titulo ? new MutationObserver(aplicar) : null;
+    if (titulo) mo!.observe(titulo, { childList: true, characterData: true, subtree: true });
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    (n > 0 ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => undefined);
+    return () => mo?.disconnect();
+  }, [n]);
+}
+

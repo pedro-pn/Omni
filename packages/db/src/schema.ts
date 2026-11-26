@@ -1079,6 +1079,13 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
   status: text("status", { enum: ["enviada", "entregue", "lida", "erro"] }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // 0087: resposta citada, encaminhada, editada e apagada para todos.
+  quotedWaId: text("quoted_wa_id"),
+  quotedBody: text("quoted_body"),
+  quotedAuthor: text("quoted_author"),
+  forwarded: boolean("forwarded").notNull().default(false),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
 /** Conversas concluídas por pessoa (0035): voltam quando chega mensagem nova do contato. */
@@ -1611,3 +1618,57 @@ export const incidentes = pgTable("incidentes", {
   atualizadoPor: uuid("atualizado_por").references(() => people.id),
   atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------- 0087: ações nas mensagens do WhatsApp
+
+/** Reações (o webhook e as ações do Omni gravam por funções; a tela só lê). */
+export const whatsappReactions = pgTable(
+  "whatsapp_reactions",
+  {
+    chatId: uuid("chat_id").notNull().references(() => whatsappChats.id, { onDelete: "cascade" }),
+    waId: text("wa_id").notNull(),
+    reactor: text("reactor").notNull(),
+    reactorName: text("reactor_name"),
+    emoji: text("emoji").notNull(),
+    reactedAt: timestamp("reacted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.chatId, t.waId, t.reactor] })],
+);
+
+/** Mensagens fixadas na conversa (até 3; o dono do número fixa). */
+export const whatsappPinnedMessages = pgTable(
+  "whatsapp_pinned_messages",
+  {
+    chatId: uuid("chat_id").notNull().references(() => whatsappChats.id, { onDelete: "cascade" }),
+    waId: text("wa_id").notNull(),
+    pinnedBy: uuid("pinned_by").references(() => people.id),
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.chatId, t.waId] })],
+);
+
+/** Por pessoa: favoritar e "apagar para mim". */
+export const whatsappMessageFlags = pgTable(
+  "whatsapp_message_flags",
+  {
+    personId: uuid("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    chatId: uuid("chat_id").notNull().references(() => whatsappChats.id, { onDelete: "cascade" }),
+    waId: text("wa_id").notNull(),
+    starred: boolean("starred").notNull().default(false),
+    hidden: boolean("hidden").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.personId, t.chatId, t.waId] })],
+);
+
+/** Conversas fixadas no topo da lista de cada pessoa (até 3). */
+export const whatsappChatPins = pgTable(
+  "whatsapp_chat_pins",
+  {
+    personId: uuid("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    chatId: uuid("chat_id").notNull().references(() => whatsappChats.id, { onDelete: "cascade" }),
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.personId, t.chatId] })],
+);
+

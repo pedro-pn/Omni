@@ -9,6 +9,8 @@ import { getPool } from "../server/db.ts";
 import { getEnv } from "../server/env.ts";
 import { personIdFromRequest } from "../server/session.ts";
 import { enviarPeloWhatsApp } from "../server/whatsapp-envio.ts";
+import { enderecoDoProxy } from "../server/email-imagem.ts";
+import { previaDoEndereco, type PreviaDeLink } from "../server/link-previa.ts";
 import { ErroParaTela } from "./erros.ts";
 import { resumoDaChamada } from "./chamadas-fns.ts";
 import { exigirModulo } from "../server/modulos.ts";
@@ -38,6 +40,8 @@ export type ConversaResumo = {
   sugestoes: { id: string; titulo: string }[];
   /** Concluída por esta pessoa e sem mensagem nova do contato desde então (inbox zero). */
   concluida: boolean;
+  /** Fixada no topo da lista desta pessoa (0087): quando fixou; null se não. */
+  fixadaEm: string | null;
   /** Mensagens do contato depois da última leitura desta pessoa (até 99; 0075). */
   naoLidas: number;
   /** Marcada como não lida pela pessoa (mostra o ponto mesmo sem mensagem nova). */
@@ -50,6 +54,8 @@ export type MensagemWhatsApp = {
   id: string;
   deMim: boolean;
   autor: string | null;
+  /** Quem enviou, no grupo (JID do WhatsApp): cor do nome e foto, como no WhatsApp Web. */
+  autorId?: string | null;
   tipo: "texto" | "imagem" | "video" | "audio" | "documento" | "figurinha" | "localizacao" | "contato" | "outro";
   texto: string | null;
   arquivo: string | null;
@@ -57,6 +63,14 @@ export type MensagemWhatsApp = {
   status: "enviada" | "entregue" | "lida" | "erro" | null;
   /** Escrita no Omni em modo de ensaio: registrada, não saiu. */
   ensaio?: boolean;
+  /** Saindo agora (só na tela, até o servidor confirmar). */
+  pendente?: boolean;
+  /** Resposta: a mensagem citada (id, trecho e quem escreveu, JID). */
+  citada?: { waId: string; texto: string | null; autorId: string | null } | null;
+  encaminhada?: boolean;
+  editada?: boolean;
+  /** Apagada para todos (o conteúdo já saiu do Omni). */
+  apagada?: boolean;
   /** Id da mensagem no WhatsApp (junta o servidor com o histórico do aparelho sem repetir). */
   waId?: string;
   /** Endereço do arquivo, quando não é o padrão (mensagem do histórico do aparelho). */
@@ -116,6 +130,8 @@ async function resumir(db: Db, filtro: ReturnType<typeof and> | undefined, limit
         ).map((r) => `${r.chatId}:${r.missionId}`),
       )
     : new Set<string>();
+  // Fixadas no topo da lista (0087, RLS: só as desta pessoa).
+  const fixadas = new Map((await db.select().from(schema.whatsappChatPins)).map((f) => [f.chatId, f.pinnedAt.toISOString()]));
   // Inbox zero: concluídas por esta pessoa (RLS: só as dela) que não receberam mensagem do contato depois.
   const concluidas = ids.length
     ? new Set(
@@ -166,6 +182,7 @@ async function resumir(db: Db, filtro: ReturnType<typeof and> | undefined, limit
             .map((m) => ({ id: m.id, titulo: tituloMissao(m.code, m.cliente) }))
         : [],
     concluida: concluidas.has(x.id),
+    fixadaEm: fixadas.get(x.id) ?? null,
     naoLidas: contagens.get(x.id) ?? 0,
     marcadaNaoLida: leituras.get(x.id)?.markedUnread ?? false,
     lidaAte: leituras.get(x.id)?.readAt.toISOString() ?? null,
@@ -234,6 +251,11 @@ export const mensagensDaConversa = createServerFn({ method: "GET" })
           waId: x.waId,
           deMim: x.fromMe,
           autor: x.fromMe ? null : (x.authorName ?? formatarTelefone(x.authorJid?.match(/^(\d{8,15})@s\.whatsapp\.net$/)?.[1] ?? null)),
+          autorId: x.fromMe ? null : x.authorJid,
+          citada: x.quotedWaId ? { waId: x.quotedWaId, texto: x.quotedBody, autorId: x.quotedAuthor } : null,
+          encaminhada: x.forwarded,
+          editada: Boolean(x.editedAt),
+          apagada: Boolean(x.deletedAt),
           tipo: x.kind,
           texto: x.body,
           arquivo: x.fileName,
@@ -314,8 +336,15 @@ export const ligarConversaMissao = createServerFn({ method: "POST" })
   });
 
 export const enviarMensagemWhatsApp = createServerFn({ method: "POST" })
-  .validator(z.object({ chatId: z.uuid(), texto: z.string().trim().min(1, "Escreva a mensagem.").max(4096, "Mensagem longa demais.") }))
-  .handler(async ({ data }): Promise<{ modo: "ensaio" | "real" }> => enviarPeloWhatsApp(await pessoa(), data.chatId, data.texto));
+  .validator(
+    z.object({
+      chatId: z.uuid(),
+      texto: z.string().trim().min(1, "Escreva a mensagem.").max(4096, "Mensagem longa demais."),
+      // Resposta: a mensagem citada.
+      citada: z.object({ waId: z.string().min(1).max(128), deMim: z.boolean(), autorId: z.string().max(200).nullable().optional(), texto: z.string().max(300).nullable().optional() }).optional(),
+    }),
+  )
+  .handler(async ({ data }): Promise<{ modo: "ensaio" | "real" }> => enviarPeloWhatsApp(await pessoa(), data.chatId, data.texto, undefined, { citada: data.citada }));
 
 /** Modo de envio deste ambiente (para a tela avisar quando é ensaio). */
 export const modoEnvioWhatsApp = createServerFn({ method: "GET" }).handler(async () => {
@@ -370,6 +399,58 @@ export const recusarSugestaoMissao = createServerFn({ method: "POST" })
         throw new ErroParaTela("Só quem acompanha o número pode responder à sugestão.");
       }
       return { ok: true };
+    });
+  });
+
+/** Prévia de um link citado numa mensagem (título, descrição, imagem pelo proxy assinado). */
+export const previaDeLink = createServerFn({ method: "GET" })
+  .validator(z.object({ url: z.url({ protocol: /^https?$/ }).max(2000) }))
+  .handler(async ({ data }): Promise<PreviaDeLink | null> => {
+    await pessoa();
+    const p = await previaDoEndereco(data.url);
+    return p ? { ...p, imagem: p.imagem ? enderecoDoProxy(getEnv().AUTH_SECRET, p.imagem) : null } : null;
+  });
+
+export type DetalhesDaConversa = {
+  /** Reações por mensagem (waId): cada emoji com quantos e se uma é minha. */
+  reacoes: Record<string, Array<{ emoji: string; quantos: number; minha: boolean; quem: string[] }>>;
+  favoritas: string[];
+  /** Apagadas só para mim. */
+  ocultas: string[];
+  /** Fixadas no topo da conversa (mais recente primeiro). */
+  fixadas: string[];
+};
+
+/** Reações, favoritas, apagadas para mim e fixadas de uma conversa (valem também para o histórico do aparelho). */
+export const detalhesDaConversa = createServerFn({ method: "GET" })
+  .validator(z.object({ chatId: z.uuid() }))
+  .handler(async ({ data }): Promise<DetalhesDaConversa> => {
+    const personId = await pessoa();
+    return withPerson(getPool(), personId, async (db) => {
+      const reacoes = await db.select().from(schema.whatsappReactions).where(eq(schema.whatsappReactions.chatId, data.chatId));
+      const flags = await db
+        .select()
+        .from(schema.whatsappMessageFlags)
+        .where(and(eq(schema.whatsappMessageFlags.chatId, data.chatId), eq(schema.whatsappMessageFlags.personId, personId)));
+      const fixadas = await db
+        .select({ waId: schema.whatsappPinnedMessages.waId })
+        .from(schema.whatsappPinnedMessages)
+        .where(eq(schema.whatsappPinnedMessages.chatId, data.chatId))
+        .orderBy(desc(schema.whatsappPinnedMessages.pinnedAt));
+      const porMensagem: DetalhesDaConversa["reacoes"] = {};
+      for (const r of reacoes) {
+        const lista = (porMensagem[r.waId] ??= []);
+        const e = lista.find((x) => x.emoji === r.emoji) ?? (lista.push({ emoji: r.emoji, quantos: 0, minha: false, quem: [] }), lista.at(-1)!);
+        e.quantos += 1;
+        if (r.reactor === "eu") e.minha = true;
+        e.quem.push(r.reactor === "eu" ? "Você" : (r.reactorName ?? formatarTelefone(r.reactor.match(/^(\d{8,15})@s\.whatsapp\.net$/)?.[1] ?? null) ?? "Contato"));
+      }
+      return {
+        reacoes: porMensagem,
+        favoritas: flags.filter((f) => f.starred).map((f) => f.waId),
+        ocultas: flags.filter((f) => f.hidden).map((f) => f.waId),
+        fixadas: fixadas.map((f) => f.waId),
+      };
     });
   });
 

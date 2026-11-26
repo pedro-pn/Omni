@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { WhatsAppError, type ConfigWebhook, type EstadoConexao, type WhatsApp } from "./tipos.ts";
+import { WhatsAppError, type ChaveDaMensagem, type ConfigWebhook, type EstadoConexao, type WhatsApp } from "./tipos.ts";
 
 /**
  * Evolution API 2.3.7 (Baileys, pareamento por QR code) — a Evolution própria
@@ -13,7 +13,7 @@ import { WhatsAppError, type ConfigWebhook, type EstadoConexao, type WhatsApp } 
 export const INSTANCIA_VALIDA = /^omni-[a-z0-9]{6,32}$/;
 
 /** Eventos que o Omni recebe pelo webhook (um endereço só, sem base64 de mídia). */
-export const EVENTOS_WEBHOOK = ["MESSAGES_UPSERT", "SEND_MESSAGE", "MESSAGES_UPDATE", "CONNECTION_UPDATE"] as const;
+export const EVENTOS_WEBHOOK = ["MESSAGES_UPSERT", "SEND_MESSAGE", "MESSAGES_UPDATE", "MESSAGES_DELETE", "MESSAGES_EDITED", "CONNECTION_UPDATE"] as const;
 
 /**
  * Configurações de cada número: não fica "online" nem marca como lido por conta própria.
@@ -42,6 +42,8 @@ export const telefoneDoJid = (jid: string | null | undefined) => (jid ? (jid.mat
 
 /** Destino aceito: número com DDI (só dígitos) ou JID de pessoa/grupo. */
 const DESTINO = /^(\d{10,15}|\d{8,15}@s\.whatsapp\.net|[\d-]{6,40}@g\.us)$/;
+
+const chaveEvolution = (c: ChaveDaMensagem) => ({ remoteJid: c.remoteJid, fromMe: c.fromMe, id: c.id, ...(c.participant ? { participant: c.participant } : {}) });
 
 export class EvolutionClient implements WhatsApp {
   private readonly base: string;
@@ -273,6 +275,30 @@ export class EvolutionClient implements WhatsApp {
     });
   }
 
+  async reagir(instancia: string, chave: ChaveDaMensagem, emoji: string): Promise<void> {
+    if (emoji.length > 16) throw new WhatsAppError("Reação inválida", 400, "reacao_invalida");
+    const r = await this.chamar("POST", "message/sendReaction", instancia, { key: chaveEvolution(chave), reaction: emoji });
+    if (r.status >= 400) this.falha("message/sendReaction", r.status);
+  }
+
+  async apagarParaTodos(instancia: string, chave: ChaveDaMensagem): Promise<void> {
+    const r = await this.chamar("DELETE", "chat/deleteMessageForEveryone", instancia, chaveEvolution(chave));
+    if (r.status >= 400) this.falha("chat/deleteMessageForEveryone", r.status);
+  }
+
+  async editar(instancia: string, chave: ChaveDaMensagem, texto: string): Promise<void> {
+    if (!texto.trim() || texto.length > 4096) throw new WhatsAppError("Mensagem vazia ou longa demais", 400, "texto_invalido");
+    const r = await this.chamar("POST", "chat/updateMessage", instancia, { number: chave.remoteJid, key: chaveEvolution(chave), text: texto });
+    if (r.status >= 400) this.falha("chat/updateMessage", r.status);
+  }
+
+  async fotoDoPerfil(instancia: string, jid: string): Promise<string | null> {
+    const r = await this.chamar("POST", "chat/fetchProfilePictureUrl", instancia, { number: jid }, { timeoutMs: 8_000 });
+    if (r.status >= 400) return null;
+    const url = (r.dados as { profilePictureUrl?: unknown } | null)?.profilePictureUrl;
+    return typeof url === "string" && url ? url : null;
+  }
+
   async infoGrupo(instancia: string, jid: string) {
     if (!/^[\d-]{6,40}@g\.us$/.test(jid)) throw new WhatsAppError("Grupo inválido", 400, "destino_invalido");
     let r;
@@ -309,10 +335,14 @@ export class EvolutionClient implements WhatsApp {
     return { conteudo: Buffer.from(m.data.base64, "base64"), mimetype: m.data.mimetype.split(";")[0]!.trim().toLowerCase(), nome: m.data.fileName ?? null };
   }
 
-  async enviarTexto(instancia: string, para: string, texto: string) {
+  async enviarTexto(instancia: string, para: string, texto: string, opcoes: { citada?: ChaveDaMensagem & { texto?: string | null } } = {}) {
     if (!DESTINO.test(para)) throw new WhatsAppError("Destino inválido", 400, "destino_invalido");
     if (!texto.trim() || texto.length > 4096) throw new WhatsAppError("Mensagem vazia ou longa demais", 400, "texto_invalido");
-    const r = await this.chamar("POST", "message/sendText", instancia, { number: para, text: texto, delay: 0, linkPreview: false });
+    const citada = opcoes.citada
+      ? { quoted: { key: { remoteJid: opcoes.citada.remoteJid, fromMe: opcoes.citada.fromMe, id: opcoes.citada.id, ...(opcoes.citada.participant ? { participant: opcoes.citada.participant } : {}) }, message: { conversation: opcoes.citada.texto ?? "" } } }
+      : {};
+    // A prévia dos links fica com o WhatsApp de quem recebe (como no celular).
+    const r = await this.chamar("POST", "message/sendText", instancia, { number: para, text: texto, delay: 0, linkPreview: true, ...citada });
     if (r.status !== 200 && r.status !== 201) this.falha("message/sendText", r.status);
     const k = z.object({ key: z.object({ id: z.string(), remoteJid: z.string() }) }).safeParse(r.dados);
     if (!k.success) throw new WhatsAppError("Resposta inesperada da Evolution", 502);

@@ -25,7 +25,13 @@ export const TIPOS_VOZ = /^audio\/(webm|ogg|mp4|mpeg|aac)$/;
 export const TIPOS_ARQUIVO = /^(image\/(jpeg|png|webp)|video\/mp4|audio\/(mpeg|ogg|mp4|aac)|application\/(pdf|zip|msword|vnd\.openxmlformats-officedocument\.[a-z.]+|vnd\.ms-excel|vnd\.ms-powerpoint)|text\/(plain|csv))$/;
 export const MAX_ARQUIVO = 16 * 1024 * 1024;
 
-export async function enviarPeloWhatsApp(personId: string, chatId: string, texto: string, arquivo?: ArquivoParaEnviar): Promise<{ modo: "ensaio" | "real" }> {
+export async function enviarPeloWhatsApp(
+  personId: string,
+  chatId: string,
+  texto: string,
+  arquivo?: ArquivoParaEnviar,
+  opcoes: { citada?: { waId: string; deMim: boolean; autorId?: string | null; texto?: string | null } } = {},
+): Promise<{ modo: "ensaio" | "real" }> {
   if (!podeSairPeloWhatsApp("conversa")) throw new ErroParaTela("Envio não permitido.");
   const modo = getEnv().WHATSAPP_ENVIO;
   if (modo === "desligado") throw new ErroParaTela("O envio pelo WhatsApp está desligado neste ambiente.");
@@ -83,7 +89,9 @@ export async function enviarPeloWhatsApp(personId: string, chatId: string, texto
       ? await w.whatsapp.enviarAudio(alvo.instancia, para, arquivo.conteudo)
       : arquivo
         ? await w.whatsapp.enviarArquivo(alvo.instancia, para, { conteudo: arquivo.conteudo, mimetype: arquivo.mimetype, nome: arquivo.nome, legenda: texto || undefined })
-        : await w.whatsapp.enviarTexto(alvo.instancia, para, texto);
+        : await w.whatsapp.enviarTexto(alvo.instancia, para, texto, opcoes.citada
+            ? { citada: { remoteJid: alvo.jid, fromMe: opcoes.citada.deMim, id: opcoes.citada.waId, participant: alvo.grupo && !opcoes.citada.deMim ? (opcoes.citada.autorId ?? null) : null, texto: opcoes.citada.texto ?? null } }
+            : {});
     await withPerson(getPool(), personId, (db) => db.update(schema.whatsappOutbox).set({ status: "enviada", waId: enviada.id }).where(eq(schema.whatsappOutbox.id, saida)));
     return { modo };
   } catch (error) {
