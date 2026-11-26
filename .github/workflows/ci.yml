@@ -48,3 +48,25 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+
+      # Ponta a ponta (E18): o build de produção do web, com o login de desenvolvimento e a CSP
+      # bloqueando (e2e/ambiente.env), no banco "omni" do serviço. Erro de JS ou violação de CSP
+      # em qualquer tela barra o merge.
+      - name: Ponta a ponta
+        env:
+          DATABASE_URL_OWNER: postgres://omni_owner:omni_owner_dev@localhost:5433/omni
+          DATABASE_URL_APP: postgres://omni_app:omni_app_dev@localhost:5433/omni
+          DATABASE_URL_WORKER: postgres://omni_worker:omni_worker_dev@localhost:5433/omni
+          APP_ORIGIN: http://localhost:3000
+          PORT: "3000"
+          E2E_URL: http://localhost:3000
+        run: |
+          npx playwright install --with-deps chromium >/dev/null
+          npm run db:migrate
+          (set -a; . e2e/ambiente.env; set +a; exec node apps/web/.output/server/index.mjs) > e2e-servidor.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null "$E2E_URL/api/saude" && break; sleep 1; done
+          curl -sf "$E2E_URL/api/saude"
+          npm run e2e
+      - name: Log do servidor (ponta a ponta)
+        if: failure()
+        run: tail -n 200 e2e-servidor.log || true
