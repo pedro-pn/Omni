@@ -75,9 +75,12 @@ A INSTRUCOES (§13) exige: **e-mails ligados a missões ficam visíveis à gest�
 > 2. **Pastas do SharePoint** de oportunidades e missões aparecem no Omni para quem já tem direito a elas pelo perfil.
 > 3. **Assistente (IA):** o Omni usa a API da OpenAI para ler RDOs e mensagens enviadas a ele e sugerir perguntas e alertas, para resumir a transcrição das reuniões do Teams que citam uma missão para ler nome, cargo e empresa na assinatura dos e-mails de quem escreve sobre uma missão, e para resumir, quando o dono da gravação pede, as ligações do WhatsApp que ele escolheu gravar (a transcrição não fica guardada no Omni, só o resumo; excluir a gravação apaga o resumo). O provedor não guarda nem usa esses dados para treinar modelos (retenção zero contratada). A IA sugere; quem decide é sempre uma pessoa.
 > 4. **WhatsApp:** os números da empresa conectados ao Omni ficam registrados nele. Mensagens internas e gerenciais nunca saem pelo WhatsApp.
-> 5. Base legal, prazos e seus direitos (acesso, correção, informação) estão na política de privacidade interna: [link]. Dúvidas: privacidade@filtrovali.com.br.
+> 5. Os dados têm prazo: mensagens e e-mails das missões ficam 5 anos depois do encerramento da missão, e os demais seguem a tabela de retenção.
+> 6. Base legal, prazos e seus direitos (acesso, correção, informação) estão na política de privacidade interna: [link]. Você baixa os seus dados no Omni em **Meu perfil → Baixar meus dados**. Dúvidas e outros pedidos: privacidade@filtrovali.com.br.
 
 ## 4. Relatório de impacto (RIPD) e legítimo interesse
+
+Rascunho técnico pronto em `ripd.md` (operações, minimização, riscos e medidas como estão no código); falta o teste de legítimo interesse e a assinatura. Pedidos de titulares: `titular.md`.
 
 Para a **leitura de e-mails** e a **IA**, que se apoiam em legítimo interesse e envolvem monitoramento de comunicação, o encarregado deve:
 

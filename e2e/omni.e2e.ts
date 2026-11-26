@@ -133,6 +133,11 @@ describe("Omni de ponta a ponta", () => {
     expect(r.status()).toBeGreaterThanOrEqual(300);
     expect(r.status()).toBeLessThan(400);
     expect(new URL(r.headers().location ?? "", BASE).pathname).toBe("/");
+    // Baixar meus dados (E15): só os da própria pessoa.
+    const dados = await op.page.request.get("/api/meus-dados");
+    expect(dados.status()).toBe(200);
+    expect(dados.headers()["content-disposition"]).toMatch(/attachment; filename="omni-meus-dados-/);
+    expect((await dados.json()).pessoa.email).toBe("e2e.operacao@omni.invalid");
     await pessoa("e2e.diretoria@omni.invalid", ["diretoria"]);
     const dir = await entrar("e2e.diretoria@omni.invalid");
     await dir.page.goto("/admin?aba=seguranca");
