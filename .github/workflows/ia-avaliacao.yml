@@ -35,7 +35,7 @@ jobs:
       - name: Sem a chave da OpenAI
         if: env.OPENAI_API_KEY == ''
         run: echo "::warning::OPENAI_API_KEY não está nos segredos do repositório; a avaliação da IA não rodou."
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.OPENAI_API_KEY != ''
       - uses: actions/setup-node@v4
         if: env.OPENAI_API_KEY != ''
