@@ -138,7 +138,7 @@ voz ◄──áudio (UDP/TCP)──► servidores do WhatsApp (internet)
 | `CHAMADA_MODO` | `producao` | `teste` | `producao`: qualquer contato; `teste`: só a lista |
 | `CHAMADA_PONTE` | `producao` | `omni` | modo da ponte na Evolution (vazio = desligada) |
 | `CHAMADA_NUMEROS_TESTE` | **vazio** (a produção recusa a lista) | números da equipe, DDI+DDD+número, separados por vírgula | só no staging |
-| `OMNI_AUDIO_PORT` | `8086` | `8088` (a 8087 é de outro serviço da VPS) | porta do áudio que o Caddy encaminha |
+| `OMNI_AUDIO_PORT` | `8086` | `8087` | porta do áudio que o Caddy encaminha |
 | `GRAVACOES_CHAVE_MESTRA` | gerar (`openssl rand -hex 32`; **cópia fora da VPS**) | gerar (outra) | abre a chave de cada gravação cifrada no SharePoint (web e worker) |
 | `CHAMADA_LIMITE_SEGUNDOS` | vazio = 3600 (máx. 14400) | vazio = 600 | duração máxima de uma ligação |
 | `CHAMADA_RETENCAO_HORAS` | vazio = **43800, 5 anos** (decisão de 11/11/2026; máx. 87600) | vazio = 24 | por quanto tempo a gravação fica |

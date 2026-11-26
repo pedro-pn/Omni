@@ -3,7 +3,7 @@
 # 172.17.0.1:<porta> e o Caddy chega por host.docker.internal.
 # Portas já usadas na VPS: 8081 filtroboard, 8082 whatsapp do Prisma, 8083 comercial,
 # 8084 Omni (produção), 8085 Omni (staging), 8086 áudio das chamadas (produção),
-# 8087 outro serviço (ocupada), 8088 áudio das chamadas (staging) — OMNI_AUDIO_PORT.
+# 8087 áudio das chamadas (staging) — OMNI_AUDIO_PORT.
 #
 # Passo a passo completo: docs/producao/deploy.md. Cada ambiente é um projeto do compose
 # (volumes e redes separados):

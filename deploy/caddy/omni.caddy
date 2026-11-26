@@ -11,9 +11,9 @@ omnistaging.filtrovali.com.br {
 	handle @interno {
 		respond 404
 	}
-	# Áudio das chamadas (WebSocket) direto no serviço de voz; só este caminho (porta 8088).
+	# Áudio das chamadas (WebSocket) direto no serviço de voz; só este caminho (porta 8087).
 	handle /omni/audio {
-		reverse_proxy host.docker.internal:8088
+		reverse_proxy host.docker.internal:8087
 	}
 	handle {
 		reverse_proxy host.docker.internal:8085

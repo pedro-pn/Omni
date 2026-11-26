@@ -17,7 +17,7 @@ Internet ──443──► infra-proxy-caddy (filtroAPP-main/deploy/infra-proxy
 
 - **Um compose para os dois ambientes:** `deploy/docker-compose.prod.yml`. Cada ambiente é um *projeto* do compose (`-p omni-staging` e `-p omni`), com volumes, rede e banco próprios, e um arquivo de variáveis próprio (`deploy/.env.staging`, `deploy/.env.production`).
 - **Nada do Omni fica exposto na internet** além do que o Caddy encaminha: o web publica só em `172.17.0.1:<porta>`; o banco e a Evolution não publicam porta.
-- **Portas na VPS:** 8081 filtroboard, 8082 Evolution do Prisma, 8083 ComercialAPP, **8084 Omni produção**, **8085 Omni staging**, **8086 áudio das chamadas (produção)**, 8087 outro serviço da VPS (ocupada), **8088 áudio das chamadas (staging)**.
+- **Portas na VPS:** 8081 filtroboard, 8082 Evolution do Prisma, 8083 ComercialAPP, **8084 Omni produção**, **8085 Omni staging**, **8086 áudio das chamadas (produção)**, **8087 áudio das chamadas (staging)**.
 
 ### Staging x produção: o que muda
 
@@ -161,7 +161,7 @@ docker logs --since 2m infra-proxy-caddy 2>&1 | grep -i omnistaging    # "certif
 ```bash
 # Confira o nome da ponte e a faixa do proxy nas regras existentes: sudo ufw status | grep 172.17.0.1
 sudo ufw allow in on br-c2f4434f4e13 from 172.20.0.0/16 to 172.17.0.1 port 8085 proto tcp comment 'Caddy -> Omni staging'
-sudo ufw allow in on br-c2f4434f4e13 from 172.20.0.0/16 to 172.17.0.1 port 8088 proto tcp comment 'Caddy -> Omni staging audio'   # com as chamadas
+sudo ufw allow in on br-c2f4434f4e13 from 172.20.0.0/16 to 172.17.0.1 port 8087 proto tcp comment 'Caddy -> Omni staging audio'   # com as chamadas
 # Produção:
 sudo ufw allow in on br-c2f4434f4e13 from 172.20.0.0/16 to 172.17.0.1 port 8084 proto tcp comment 'Caddy -> Omni web'
 sudo ufw allow in on br-c2f4434f4e13 from 172.20.0.0/16 to 172.17.0.1 port 8086 proto tcp comment 'Caddy -> Omni audio'           # com as chamadas
@@ -197,7 +197,7 @@ Depois: entre com a conta dona do número de teste, abra **Conversas** e leia o 
 
 ```bash
 omni-stg --profile whatsapp --profile chamadas up -d --build --wait
-curl -s -o /dev/null -w '%{http_code}\n' http://172.17.0.1:8088/internal/control   # 404: a API interna não sai pela porta do áudio
+curl -s -o /dev/null -w '%{http_code}\n' http://172.17.0.1:8087/internal/control   # 404: a API interna não sai pela porta do áudio
 ```
 
 ## 7. Operação
