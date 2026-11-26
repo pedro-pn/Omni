@@ -41,7 +41,7 @@ registro do que foi feito e de onde está.
 | E17 Revisão de segurança | 8 | 🟡 congelada | `SECURITY.md` e aviso privado de falhas no GitHub. Falta a revisão de segurança registrada. |
 | E23 Teste instável da cifra das gravações | 2 | ✅ | Corrigido na causa: de 1,95 s para 34 ms, sem aumentar o limite. |
 
-| E24 Página de manutenção | 3 | 🟡 | Página própria do Omni no Caddy (503, sem nada de fora) quando o web não responde e `deploy/manutencao.sh` para manutenção de propósito; o `publicar.sh` não encerra uma manutenção ligada à mão. Falta subir o trecho no Caddy do `infra-proxy` e conferir no staging. |
+| E24 Página de manutenção | 3 | ✅ | Página própria do Omni no Caddy (503, sem nada de fora) quando o web não responde e `deploy/manutencao.sh` para manutenção de propósito; o `publicar.sh` não encerra uma manutenção ligada à mão. No ar e conferida no staging em 26/11. |
 
 ## Etapa 3: repositório público
 
