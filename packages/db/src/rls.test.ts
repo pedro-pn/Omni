@@ -198,6 +198,11 @@ describe.skipIf(!available)("RLS e sessões", () => {
     await expect(app.query("SELECT * FROM sessions")).rejects.toThrow(/permission denied/);
   });
 
+  it("o web não vê nem mexe na fila de arquivos da retenção (0081)", async () => {
+    await expect(app.query("SELECT * FROM arquivos_para_apagar")).rejects.toThrow(/permission denied/);
+    await expect(app.query("INSERT INTO arquivos_para_apagar (sp_drive_id, sp_item_id, origem) VALUES ('d', 'i', 'canal')")).rejects.toThrow(/permission denied/);
+  });
+
   it("pessoa comum não concede perfil; admin concede", async () => {
     await expectDbError(
       withPerson(app, commonId, (db) =>

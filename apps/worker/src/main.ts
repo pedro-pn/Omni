@@ -33,13 +33,13 @@ import { enviarLembretes } from "./tarefas/lembretes.ts";
 import { buscarAudioNoServico, resumirChamadas, apagarAudioNoServico, type DepsResumoChamadas } from "./chamadas/resumo.ts";
 import { arquivarGravacoes } from "./chamadas/arquivar.ts";
 import { chaveMestra, decifrarGravacao, desembrulharChave } from "@omni/integrations/gravacoes";
-import { sql } from "drizzle-orm";
 import { ffmpegDisponivel, m4aParaWavMono, wavParaM4a } from "./chamadas/ffmpeg.ts";
 import { detectarChegadas } from "./ia/chegadas.ts";
 import { lerAssinaturas } from "./ia/assinaturas.ts";
 import { vincularPelasAssinaturas } from "./contatos/assinaturas.ts";
 import { enviarAvisosPorEmail, enviarResumoSemanal, type EnviarEmail } from "./tarefas/emails.ts";
 import { vigiarRiscos } from "./seguranca/riscos.ts";
+import { aplicarRetencao } from "./operacao/retencao.ts";
 import { avisarErros, conferirOperacao, registrarErroDoWorker } from "./operacao/erros.ts";
 import { conferidorDoTeto, openAiComTeto } from "./operacao/teto-ia.ts";
 
@@ -66,7 +66,7 @@ import { conferidorDoTeto, openAiComTeto } from "./operacao/teto-ia.ts";
  *   entra-pessoas       1 h     quem está atribuído ao app "Omni" no Entra → Pessoas; quem sai é desativado
  *   teams-reunioes     15 min  agenda das caixas: reuniões ligadas a missões; transcrição → resumo (IA_RESUMO_REUNIAO) no Gerencial
  *   whatsapp-estado     5 min  confere na Evolution do Omni o estado dos números (o webhook avisa na hora)
- *   retencao           03:40   retenção por tipo de dado (RETENCAO: ensaio só conta, real apaga)
+ *   retencao           03:40   retenção por tipo de dado (RETENCAO: ensaio só conta, real apaga e apaga de vez no SharePoint os arquivos vencidos)
  *   riscos             10 min  alertas de risco: download em massa e arquivos enviados para fora (Administração e diretoria)
  *   alertas-erros       5 min  erros do sistema novos (ou que voltaram depois de 6 h) → aviso no sino e no celular de quem é admin
  *   saude-operacao      1 h    status do backup e do ensaio de restauração (OPERACAO_STATUS=ligado) → erro do sistema se passar do limite
@@ -159,15 +159,6 @@ if (env.OPERACAO_STATUS === "ligado") {
   await tarefa("saude-operacao", "35 * * * *", () => conferirOperacao(db, env.OPERACAO_STATUS_DIR));
 } else {
   console.warn("[worker] OPERACAO_STATUS desligado: o status do backup não é conferido");
-}
-// Retenção por tipo de dado (0066): todo dia às 03:40; prazos na função app.aplicar_retencao.
-if (env.RETENCAO !== "desligada") {
-  await tarefa(
-    "retencao",
-    "40 3 * * *",
-    async () => (await db.execute<{ r: Record<string, unknown> }>(sql`SELECT app.aplicar_retencao(${env.RETENCAO === "real"}) AS r`)).rows[0]?.r ?? {},
-    false,
-  );
 }
 await tarefa(
   "ia-desvios",
@@ -274,6 +265,13 @@ if (env.GRAPH_TENANT_ID && env.GRAPH_CLIENT_ID && env.GRAPH_PRIVATE_KEY_PATH && 
   }));
 } else {
   console.warn("[worker] Graph não configurado (GRAPH_*): e-mails das missões desligados");
+}
+
+// Retenção por tipo de dado (0066, 0081): todo dia às 03:40; prazos em app.aplicar_retencao. Com
+// RETENCAO=real, os arquivos vencidos no SharePoint são apagados de vez (operacao/retencao.ts).
+const modoRetencao = env.RETENCAO;
+if (modoRetencao !== "desligada") {
+  await tarefa("retencao", "40 3 * * *", () => aplicarRetencao(db, modoRetencao, graphGeral), false);
 }
 
 if (env.WHATSAPP_EVOLUTION_URL && env.WHATSAPP_EVOLUTION_KEY) {
