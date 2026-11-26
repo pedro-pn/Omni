@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type PointerEvent as EventoPonteiro, type 
  * Marcar como lida / não lida nas listas (conversas, e-mails, caixa única):
  * - clique no botão que aparece ao passar o mouse (no celular ele fica sempre visível);
  * - botão direito do mouse: menu com as ações do item;
- * - deslizar para a DIREITA no celular/tablet (para a esquerda continua o "Concluir" das conversas).
+ * - deslizar para a DIREITA no celular/tablet (para a esquerda continua o "Arquivar" das conversas).
  */
 
 export type AcaoDeslize = { rotulo: string; icone: LucideIcon; acao: () => void };

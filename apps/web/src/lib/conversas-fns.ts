@@ -9,6 +9,8 @@ import { getPool } from "../server/db.ts";
 import { getEnv } from "../server/env.ts";
 import { personIdFromRequest } from "../server/session.ts";
 import { enviarPeloWhatsApp } from "../server/whatsapp-envio.ts";
+import { enderecoDoProxy } from "../server/email-imagem.ts";
+import { previaDoEndereco, type PreviaDeLink } from "../server/link-previa.ts";
 import { ErroParaTela } from "./erros.ts";
 import { resumoDaChamada } from "./chamadas-fns.ts";
 import { exigirModulo } from "../server/modulos.ts";
@@ -50,6 +52,8 @@ export type MensagemWhatsApp = {
   id: string;
   deMim: boolean;
   autor: string | null;
+  /** Quem enviou, no grupo (JID do WhatsApp): cor do nome e foto, como no WhatsApp Web. */
+  autorId?: string | null;
   tipo: "texto" | "imagem" | "video" | "audio" | "documento" | "figurinha" | "localizacao" | "contato" | "outro";
   texto: string | null;
   arquivo: string | null;
@@ -57,6 +61,8 @@ export type MensagemWhatsApp = {
   status: "enviada" | "entregue" | "lida" | "erro" | null;
   /** Escrita no Omni em modo de ensaio: registrada, não saiu. */
   ensaio?: boolean;
+  /** Saindo agora (só na tela, até o servidor confirmar). */
+  pendente?: boolean;
   /** Id da mensagem no WhatsApp (junta o servidor com o histórico do aparelho sem repetir). */
   waId?: string;
   /** Endereço do arquivo, quando não é o padrão (mensagem do histórico do aparelho). */
@@ -234,6 +240,7 @@ export const mensagensDaConversa = createServerFn({ method: "GET" })
           waId: x.waId,
           deMim: x.fromMe,
           autor: x.fromMe ? null : (x.authorName ?? formatarTelefone(x.authorJid?.match(/^(\d{8,15})@s\.whatsapp\.net$/)?.[1] ?? null)),
+          autorId: x.fromMe ? null : x.authorJid,
           tipo: x.kind,
           texto: x.body,
           arquivo: x.fileName,
@@ -371,5 +378,14 @@ export const recusarSugestaoMissao = createServerFn({ method: "POST" })
       }
       return { ok: true };
     });
+  });
+
+/** Prévia de um link citado numa mensagem (título, descrição, imagem pelo proxy assinado). */
+export const previaDeLink = createServerFn({ method: "GET" })
+  .validator(z.object({ url: z.url({ protocol: /^https?$/ }).max(2000) }))
+  .handler(async ({ data }): Promise<PreviaDeLink | null> => {
+    await pessoa();
+    const p = await previaDoEndereco(data.url);
+    return p ? { ...p, imagem: p.imagem ? enderecoDoProxy(getEnv().AUTH_SECRET, p.imagem) : null } : null;
   });
 

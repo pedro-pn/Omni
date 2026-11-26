@@ -129,6 +129,7 @@ export const paginaDoHistorico = createServerFn({ method: "POST" })
         waId: m.id,
         deMim: m.deMim,
         autor: m.deMim ? null : (m.autorNome ?? formatarTelefone(m.autorJid?.match(/^(\d{8,15})@s\.whatsapp\.net$/)?.[1] ?? null)),
+        autorId: m.deMim ? null : (m.autorJid ?? null),
         tipo: m.conteudo,
         texto: m.texto?.slice(0, 4096) ?? null,
         arquivo: m.arquivo?.slice(0, 255) ?? null,
