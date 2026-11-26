@@ -127,6 +127,8 @@ services:
       FILTROAPP_API_TOKEN: ${FILTROAPP_API_TOKEN:-}
       WHATSAPP_EVOLUTION_URL: ${WHATSAPP_EVOLUTION_URL:-}
       WHATSAPP_EVOLUTION_KEY: ${WHATSAPP_EVOLUTION_KEY:-}
+      WHATSAPP_ACOES_URL: ${WHATSAPP_ACOES_URL:-}
+      WHATSAPP_ACOES_TOKEN: ${WHATSAPP_ACOES_TOKEN:-}
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
       WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
       # "real" só depois do inventário dos números e do comunicado ao time
@@ -174,6 +176,8 @@ services:
       FILTROAPP_ESCRITA: ${FILTROAPP_ESCRITA:-desligada}
       WHATSAPP_EVOLUTION_URL: ${WHATSAPP_EVOLUTION_URL:-}
       WHATSAPP_EVOLUTION_KEY: ${WHATSAPP_EVOLUTION_KEY:-}
+      WHATSAPP_ACOES_URL: ${WHATSAPP_ACOES_URL:-}
+      WHATSAPP_ACOES_TOKEN: ${WHATSAPP_ACOES_TOKEN:-}
       # IA v2 (ADR 0005): leitura dos RDOs, resumo de reuniões e alertas pedidos à IA (todas desligadas por padrão)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
@@ -237,7 +241,7 @@ services:
       dockerfile: Dockerfile.chamadas
       additional_contexts:
         ponte: ../experiments/whatsapp-chamada/evolution-bridge
-    image: omni-evolution:2.3.7-chamadas.1
+    image: omni-evolution:2.3.7-chamadas.2
     restart: unless-stopped
     environment:
       # Ponte das chamadas (perfil "chamadas"): "producao" (qualquer contato) ou "omni"
@@ -248,6 +252,11 @@ services:
       OMNI_CHAMADA_PORTA: "8097"
       OMNI_CHAMADA_BIND: 0.0.0.0
       OMNI_CHAMADA_HOST: evolution
+      # Ponte de ações do Omni (agenda, adicionar contato, fixar e favoritar no celular). Vazio = desligada.
+      OMNI_ACOES_TOKEN: ${WHATSAPP_ACOES_TOKEN:-}
+      OMNI_ACOES_PORTA: "8099"
+      OMNI_ACOES_BIND: 0.0.0.0
+      OMNI_ACOES_HOST: evolution
       SERVER_TYPE: http
       SERVER_PORT: "8080"
       SERVER_URL: http://evolution:8080

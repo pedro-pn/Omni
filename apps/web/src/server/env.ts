@@ -41,6 +41,9 @@ const schema = z
     // WhatsApp pela Evolution própria do Omni (ADR 0004): opcional até ser configurado.
     WHATSAPP_EVOLUTION_URL: opcional(z.url({ protocol: /^https?$/ })),
     WHATSAPP_EVOLUTION_KEY: opcional(z.string().min(32)),
+    // Ponte de ações do Omni dentro da Evolution (agenda, adicionar contato, fixar e favoritar no celular).
+    WHATSAPP_ACOES_URL: opcional(z.url({ protocol: /^http$/ })),
+    WHATSAPP_ACOES_TOKEN: opcional(z.string().min(32)),
     WHATSAPP_WEBHOOK_SECRET: opcional(z.string().min(32)),
     WHATSAPP_WEBHOOK_URL: opcional(z.url({ protocol: /^https?$/ })),
     // Envio pelo WhatsApp: "desligado", "ensaio" (registra, não envia) ou "real" (só em produção).

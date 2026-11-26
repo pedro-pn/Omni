@@ -12,6 +12,7 @@ import {
   Pin,
   PinOff,
   Star,
+  UserPlus,
   Download,
   FileText,
   Image,
@@ -32,9 +33,8 @@ import {
   Smartphone,
   Users,
   Video,
-  X,
-} from "lucide-react";
-import {
+  X, User } from "lucide-react";
+import { memo,
   useEffect,
   useMemo,
   useRef,
@@ -92,7 +92,8 @@ import { AvisoNaoLidas, SetaParaBaixo, useRolagemDoChat } from "../comum/Rolagem
 import { VincularContato } from "../unica/Vincular.tsx";
 import { ImagemComPrevia } from "../comum/ImagemComPrevia.tsx";
 import { PreviaDoLink, primeiroLink, TextoComLinks } from "./Links.tsx";
-import { fixarConversa } from "../../lib/whatsapp-acoes-fns.ts";
+import { horaSP, quandoCurto, separadorDoDia } from "../../lib/datas-sp.ts";
+import { fixarConversa, salvarContatoWhatsApp } from "../../lib/whatsapp-acoes-fns.ts";
 import { corDoAutor, FotoDoAutor } from "./AutorDoGrupo.tsx";
 import {
   BarraDeFixadas,
@@ -107,6 +108,7 @@ import {
   useAcoes,
   useDetalhesDaConversa,
 } from "./AcoesDaMensagem.tsx";
+import { useListaProgressiva } from "../comum/ListaProgressiva.tsx";
 
 /**
  * Conversas do WhatsApp (Fase 7). As conversas e as mensagens vêm do webhook da
@@ -116,26 +118,8 @@ import {
 
 const TZ = { timeZone: "America/Sao_Paulo" } as const;
 
-/** De outro ano (no fuso da empresa): a data mostra o ano. */
-const deOutroAno = (d: Date) => d.toLocaleDateString("pt-BR", { year: "numeric", ...TZ }) !== new Date().toLocaleDateString("pt-BR", { year: "numeric", ...TZ });
-
-export function quandoCurto(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const hoje = new Date().toLocaleDateString("pt-BR", TZ);
-  return d.toLocaleDateString("pt-BR", TZ) === hoje
-    ? d.toLocaleTimeString("pt-BR", {
-        hour: "2-digit",
-        minute: "2-digit",
-        ...TZ,
-      })
-    : d.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        ...(deOutroAno(d) ? { year: "2-digit" } : {}),
-        ...TZ,
-      });
-}
+// Datas com formatadores criados uma vez (lib/datas-sp.ts): formatar em cada item travava a troca de conversa.
+export { quandoCurto };
 
 /** Com o Omni aberto, baixa para este aparelho o histórico do WhatsApp da pessoa (continua de onde parou). */
 export function useSincronizarHistoricoDoWhatsApp(personId: string) {
@@ -570,6 +554,7 @@ export function ListaConversas({
     : verArquivadas
       ? arquivadas
       : fixadasNoTopo(daAba.filter((c) => !c.concluida));
+  const progressiva = useListaProgressiva(filtradas.length, `${termo}|${aba}|${verArquivadas}`);
   // Sem conversas e sem o WhatsApp conectado: o QR code já fica na tela.
   if (!conversas.length && precisaConectar) return <ConectarWhatsApp />;
   if (!conversas.length) {
@@ -643,7 +628,7 @@ export function ListaConversas({
             </button>
           </li>
         )}
-        {filtradas.map((c) => (
+        {filtradas.slice(0, progressiva.limite).map((c) => (
           <ItemConversa
             key={c.id}
             c={c}
@@ -651,6 +636,7 @@ export function ListaConversas({
             onSelecionar={onSelecionar}
           />
         ))}
+        {progressiva.faltam > 0 && <li ref={progressiva.sentinela} className="h-8" aria-hidden />}
         {!filtradas.length && (
           <li className="px-6 py-8 text-center text-muted">
             {termo
@@ -677,7 +663,7 @@ function prefetchMensagens(qc: ReturnType<typeof useQueryClient>, chatId: string
   void qc.prefetchQuery({ queryKey: ["whatsapp", "mensagens", chatId], queryFn: () => mensagensDaConversa({ data: { chatId } }), staleTime: 15_000 });
 }
 
-function ItemConversa({
+const ItemConversa = memo(function ItemConversa({
   c,
   selecionada,
   onSelecionar,
@@ -758,7 +744,7 @@ function ItemConversa({
       {menu.menu}
     </li>
   );
-}
+});
 
 const ICONE_TIPO: Partial<Record<MensagemWhatsApp["tipo"], typeof Image>> = {
   imagem: Image,
@@ -826,11 +812,7 @@ function LinhaDeChamada({ m }: { m: MensagemWhatsApp }) {
     : c.direcao === "entrada"
       ? PhoneIncoming
       : PhoneOutgoing;
-  const quando = new Date(m.em).toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...TZ,
-  });
+  const quando = horaSP(new Date(m.em));
   const texto = perdida
     ? "Chamada perdida"
     : !c.atendida
@@ -907,8 +889,9 @@ function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo
         }`}
       >
         {comAutor && inicio && m.autor && (
-          <p className="mb-0.5 text-xs font-semibold" style={{ color: corDoAutor(m.autorId ?? m.autor) }}>
-            {m.autor}
+          <p className="mb-0.5 flex items-baseline gap-2 text-xs font-semibold" style={{ color: corDoAutor(m.autorId ?? m.autor) }}>
+            <span>{m.autor}</span>
+            {m.autorPerfil && <span className="truncate font-normal text-muted">~ {m.autorPerfil}</span>}
           </p>
         )}
         {m.ensaio && (
@@ -943,11 +926,7 @@ function Balao({ m, grupo, chatId, inicio = true }: { m: MensagemWhatsApp; grupo
         >
           {favorita && <Star size={11} aria-label="Favorita" className="fill-current" />}
           {m.editada && !m.apagada && <span className="italic">Editada</span>}
-          {new Date(m.em).toLocaleTimeString("pt-BR", {
-            hour: "2-digit",
-            minute: "2-digit",
-            ...TZ,
-          })}
+          {horaSP(new Date(m.em))}
           {m.deMim && m.status === "lida" && (
             // Azul como no WhatsApp (claro, para ler sobre o verde do balão).
             <CheckCheck size={15} strokeWidth={2.4} aria-label="Lida" className="text-sky-300" />
@@ -1228,13 +1207,7 @@ export function PainelConversa({
         )}
         {itens?.map((item, i) => {
           const em = new Date(item.em);
-          const d = em.toLocaleDateString("pt-BR", {
-            weekday: "long",
-            day: "2-digit",
-            month: "2-digit",
-            ...(deOutroAno(em) ? { year: "numeric" } : {}),
-            ...TZ,
-          });
+          const d = separadorDoDia(em);
           const novoDia = d !== dia;
           dia = d;
           return (
@@ -1738,7 +1711,7 @@ export function FotoConversa({
         <Users size={18} aria-hidden />
       ) : (
         <span className="text-sm font-semibold">
-          {c.nome.slice(0, 2).toUpperCase()}
+          {/^\p{L}/u.test(c.nome) ? c.nome.slice(0, 2).toUpperCase() : <User size={18} aria-hidden />}
         </span>
       )}
     </span>
@@ -1864,30 +1837,48 @@ export function ConectarWhatsApp({ onFechar, automatico = false }: { onFechar?: 
 function NomeDaConversa({ conversa }: { conversa: ConversaResumo }) {
   const qc = useQueryClient();
   const [editando, setEditando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  // Adicionar/editar contato (0088): com o número, salva na agenda do celular (como no WhatsApp Web).
   const salvar = useMutation({
-    mutationFn: (nome: string) =>
-      renomearContato({ data: { chatId: conversa.id, nome } }),
-    onSuccess: () => {
+    mutationFn: async (nome: string) =>
+      conversa.telefone
+        ? salvarContatoWhatsApp({ data: { numberId: conversa.numero.id, telefone: conversa.telefone, nome, chatId: conversa.id } })
+        : renomearContato({ data: { chatId: conversa.id, nome } }).then(() => ({ noCelular: false })),
+    onSuccess: (r) => {
       setEditando(false);
+      setAviso(r.noCelular ? null : "Salvo no Omni (não foi para a agenda do celular neste ambiente).");
       void qc.invalidateQueries({ queryKey: ["whatsapp", "conversas"] });
     },
   });
   if (!editando)
     return (
-      <h2 className="flex min-w-0 items-center gap-1.5 font-semibold">
-        <span className="truncate">{conversa.nome}</span>
-        {!conversa.grupo && conversa.podeResponder && (
-          <button
-            type="button"
-            onClick={() => setEditando(true)}
-            aria-label="Dar um nome a este contato"
-            title="Dar um nome a este contato"
-            className="shrink-0 rounded p-0.5 text-muted hover:text-ink"
-          >
-            <Pencil size={14} aria-hidden />
-          </button>
-        )}
-      </h2>
+      <div className="min-w-0">
+        <h2 className="flex min-w-0 items-center gap-1.5 font-semibold">
+          <span className="truncate">{conversa.nome}</span>
+          {!conversa.salvo && conversa.perfil && <span className="truncate text-xs font-normal text-muted">~ {conversa.perfil}</span>}
+          {!conversa.grupo && conversa.podeResponder && (conversa.salvo || !conversa.telefone) && (
+            <button
+              type="button"
+              onClick={() => setEditando(true)}
+              aria-label="Editar contato"
+              title="Editar contato"
+              className="shrink-0 rounded p-0.5 text-muted hover:text-ink"
+            >
+              <Pencil size={14} aria-hidden />
+            </button>
+          )}
+          {!conversa.grupo && conversa.podeResponder && !conversa.salvo && conversa.telefone && (
+            <button
+              type="button"
+              onClick={() => setEditando(true)}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-linha px-2 py-0.5 text-xs font-medium text-floresta-texto hover:bg-superficie-2"
+            >
+              <UserPlus size={13} aria-hidden /> Adicionar contato
+            </button>
+          )}
+        </h2>
+        {aviso && <p className="text-xs text-muted">{aviso}</p>}
+      </div>
     );
   return (
     <form
@@ -1901,12 +1892,7 @@ function NomeDaConversa({ conversa }: { conversa: ConversaResumo }) {
         name="nome"
         autoFocus
         maxLength={120}
-        defaultValue={
-          conversa.telefone &&
-          conversa.nome === formatarTelefone(conversa.telefone)
-            ? ""
-            : conversa.nome
-        }
+        defaultValue={conversa.salvo ? conversa.nome : (conversa.perfil ?? "")}
         placeholder="Nome do contato"
         aria-label="Nome do contato"
         className="min-w-0 rounded-md border border-linha bg-superficie px-2 py-0.5 text-sm"

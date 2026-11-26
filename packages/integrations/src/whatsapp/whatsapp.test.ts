@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CABECALHO_WEBHOOK, EvolutionClient, EVENTOS_WEBHOOK, lerEventoWebhook, lerMensagemEvolution, WhatsAppError } from "./index.ts";
+import { CABECALHO_WEBHOOK, EvolutionClient, EVENTOS_WEBHOOK, lerEventoWebhook, lerMensagemEvolution, PonteDeAcoes, WhatsAppError } from "./index.ts";
 
 const CHAVE = "k".repeat(64);
 const SEGREDO = "s".repeat(64);
@@ -270,5 +270,25 @@ describe("ações nas mensagens pelo webhook (0087)", () => {
     ).toEqual([expect.objectContaining({ tipo: "edicao", chatJid: "120363000000000001@g.us", id: "M3", texto: "Novo" })]);
     expect(upsert({ pinInChatMessage: { key: { id: "M1" }, type: 1 } })[0]).toMatchObject({ tipo: "fixada", id: "M1", fixar: true });
     expect(upsert({ pinInChatMessage: { key: { id: "M1" }, type: 2 } })[0]).toMatchObject({ tipo: "fixada", fixar: false });
+  });
+});
+
+describe("ponte de ações", () => {
+  it("manda o token e a ação; devolve só os contatos válidos; erro com o código da ponte", async () => {
+    const pedidos: Array<{ url: string; corpo: unknown; auth: string | null }> = [];
+    const respostas = [
+      { status: 200, corpo: { contatos: [{ jid: "5547900000011@s.whatsapp.net", lid: null, telefone: "5547900000011@s.whatsapp.net", nome: "Ana" }, { jid: "x", nome: "" }] } },
+      { status: 409, corpo: { erro: "linha_indisponivel" } },
+    ];
+    const f = (async (url: string, init: RequestInit) => {
+      pedidos.push({ url, corpo: JSON.parse(String(init.body)), auth: new Headers(init.headers).get("authorization") });
+      const r = respostas.shift()!;
+      return new Response(JSON.stringify(r.corpo), { status: r.status });
+    }) as unknown as typeof fetch;
+    const p = new PonteDeAcoes({ url: "http://evolution:8099", token: "t".repeat(40), fetch: f });
+    expect(await p.contatos("5547900000001")).toEqual([{ jid: "5547900000011@s.whatsapp.net", lid: null, telefone: "5547900000011@s.whatsapp.net", nome: "Ana" }]);
+    expect(pedidos[0]).toEqual({ url: "http://evolution:8099/v1/acoes", corpo: { telefone: "5547900000001", acao: "contatos", recarregar: false }, auth: `Bearer ${"t".repeat(40)}` });
+    await expect(p.salvarContato("5547900000001", "5547900000011@s.whatsapp.net", "Ana")).rejects.toMatchObject({ status: 409, code: "linha_indisponivel" });
+    expect(() => new PonteDeAcoes({ url: "https://evolution:8099", token: "t".repeat(40) })).toThrow();
   });
 });

@@ -16,6 +16,7 @@ import {
   Star,
   StarOff,
   Trash2,
+  UserPlus,
   X,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
@@ -31,6 +32,7 @@ import {
   favoritarMensagem,
   fixarMensagem,
   reagirMensagem,
+  salvarContatoWhatsApp,
 } from "../../lib/whatsapp-acoes-fns.ts";
 
 /**
@@ -139,6 +141,7 @@ export function MenuDaMensagem({ m, children }: { m: MensagemWhatsApp; children:
   const a = useAcoes();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [emojis, setEmojis] = useState(false);
+  const [contato, setContato] = useState(false);
   const reagir = useReagir();
   const invalidar = useInvalidar(a?.conversa.id ?? "");
   const acao = useMutation({
@@ -176,9 +179,9 @@ export function MenuDaMensagem({ m, children }: { m: MensagemWhatsApp; children:
     m.texto && !m.apagada ? { rotulo: "Copiar", icone: Copy, fazer: () => void navigator.clipboard.writeText(m.texto!).then(() => a.aviso("Copiada.")) } : null,
     temMidia ? { rotulo: "Baixar", icone: Download, fazer: () => window.open(`${m.midia ?? `/api/whatsapp/midia/${m.id}`}?baixar=1`, "_blank", "noopener") } : null,
     responde && !m.apagada
-      ? { rotulo: fixada ? "Desafixar" : "Fixar", icone: fixada ? PinOff : Pin, fazer: () => acao.mutate(() => fixarMensagem({ data: { chatId: c.id, waId, fixar: !fixada } })) }
+      ? { rotulo: fixada ? "Desafixar" : "Fixar", icone: fixada ? PinOff : Pin, fazer: () => acao.mutate(() => fixarMensagem({ data: { chatId: c.id, waId, fixar: !fixada, deMim: m.deMim, autorId: m.autorId ?? null } })) }
       : null,
-    { rotulo: favorita ? "Desfavoritar" : "Favoritar", icone: favorita ? StarOff : Star, fazer: () => acao.mutate(() => favoritarMensagem({ data: { chatId: c.id, waId, favorita: !favorita } })) },
+    { rotulo: favorita ? "Desfavoritar" : "Favoritar", icone: favorita ? StarOff : Star, fazer: () => acao.mutate(() => favoritarMensagem({ data: { chatId: c.id, waId, favorita: !favorita, deMim: m.deMim } })) },
     { rotulo: "Selecionar", icone: CheckSquare, fazer: () => a.alternarSelecao(m) },
     c.grupo && !m.deMim && telefoneDoAutor && responde
       ? {
@@ -190,6 +193,10 @@ export function MenuDaMensagem({ m, children }: { m: MensagemWhatsApp; children:
               window.dispatchEvent(new CustomEvent("omni:abrir-conversa", { detail: r.chatId }));
             }),
         }
+      : null,
+    // Grupo: quem escreveu e não está salvo na agenda (aparece pelo número e "~ Nome").
+    c.grupo && !m.deMim && telefoneDoAutor && responde && m.autorPerfil !== undefined && m.autorPerfil !== null
+      ? { rotulo: "Adicionar contato", icone: UserPlus, fazer: () => setContato(true) }
       : null,
     responde && m.deMim && m.tipo === "texto" && !m.apagada && recente < 15 * 60_000 ? { rotulo: "Editar", icone: Pencil, fazer: () => a.editar(m) } : null,
     { rotulo: "Apagar para mim", icone: Trash2, perigo: true, fazer: () => confirm("Apagar esta mensagem só para você?") && acao.mutate(() => apagarMensagem({ data: { chatId: c.id, waId, deMim: m.deMim, autorId: m.autorId ?? null, paraTodos: false } })) },
@@ -213,6 +220,9 @@ export function MenuDaMensagem({ m, children }: { m: MensagemWhatsApp; children:
       }}
     >
       {children}
+      {contato && telefoneDoAutor && (
+        <DialogoContato numberId={c.numero.id} telefone={telefoneDoAutor} sugestao={m.autorPerfil ?? ""} fechar={() => setContato(false)} aoSalvar={(texto) => (a.aviso(texto), invalidar())} />
+      )}
       <button
         type="button"
         aria-label="Opções da mensagem"
@@ -335,7 +345,7 @@ export function BarraDeSelecao({ fechar }: { fechar: () => void }) {
       >
         <Copy size={16} aria-hidden /> Copiar
       </button>
-      <button type="button" disabled={!ms.length} onClick={() => acao.mutate(() => Promise.all(ms.map((m) => favoritarMensagem({ data: { chatId: c.id, waId: m.waId!, favorita: true } }))))} className={botao}>
+      <button type="button" disabled={!ms.length} onClick={() => acao.mutate(() => Promise.all(ms.map((m) => favoritarMensagem({ data: { chatId: c.id, waId: m.waId!, favorita: true, deMim: m.deMim } }))))} className={botao}>
         <Star size={16} aria-hidden /> Favoritar
       </button>
       <button
@@ -470,3 +480,54 @@ export function DialogoEditar({ m, chatId, fechar }: { m: MensagemWhatsApp; chat
     </dialog>
   );
 }
+
+/** Adicionar contato (pessoa de um grupo): salva na agenda do celular do número, como no WhatsApp Web. */
+function DialogoContato({ numberId, telefone, sugestao, fechar, aoSalvar }: { numberId: string; telefone: string; sugestao: string; fechar: () => void; aoSalvar: (aviso: string) => void }) {
+  const dialogo = useRef<HTMLDialogElement>(null);
+  const [nome, setNome] = useState(sugestao);
+  const qc = useQueryClient();
+  const salvar = useMutation({
+    mutationFn: () => salvarContatoWhatsApp({ data: { numberId, telefone, nome } }),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["whatsapp"] });
+      aoSalvar(r.noCelular ? "Contato salvo na agenda do celular." : "Contato salvo no Omni (não foi para a agenda do celular neste ambiente).");
+      fechar();
+    },
+  });
+  useEffect(() => dialogo.current?.showModal(), []);
+  return createPortal(
+    <dialog
+      ref={dialogo}
+      onCancel={(e) => (e.preventDefault(), fechar())}
+      onClick={(e) => e.stopPropagation()}
+      aria-label="Adicionar contato"
+      className="m-auto w-[min(24rem,calc(100vw-2rem))] rounded-lg border border-linha bg-superficie p-0 text-ink backdrop:bg-black/50"
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          salvar.mutate();
+        }}
+        className="space-y-3 p-4"
+      >
+        <h2 className="font-semibold">Adicionar contato</h2>
+        <p className="text-sm text-muted">{formatarTelefone(telefone) ?? telefone}</p>
+        <label className="block">
+          <span className="text-sm font-medium">Nome</span>
+          <input value={nome} onChange={(e) => setNome(e.target.value)} autoFocus maxLength={120} className="mt-1 w-full rounded-md border border-linha bg-superficie-2 px-3 py-2" />
+        </label>
+        {salvar.isError && <p role="alert" className="text-sm text-vermelho">{erroDe(salvar.error)}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={fechar} className="rounded-md px-3 py-1.5 text-sm hover:bg-superficie-2">
+            Cancelar
+          </button>
+          <button type="submit" disabled={!nome.trim() || salvar.isPending} className="rounded-md bg-floresta px-3 py-1.5 text-sm font-medium text-white hover:bg-floresta-escura disabled:opacity-60">
+            Salvar
+          </button>
+        </div>
+      </form>
+    </dialog>,
+    document.body,
+  );
+}
+

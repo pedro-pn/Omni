@@ -3,9 +3,21 @@ import { proto } from '../../WAProto/index.js';
 import { encodeSignedDeviceIdentity, writeRandomPadMax16, unpadRandomMax16 } from '../Utils/index.js';
 import { jidEncode } from '../WABinary/index.js';
 import { CallBridge } from './bridge.mjs';
+import { PonteDeAcoes } from './acoes.mjs';
 
 let bridge;
+let acoes;
 export function attachCalls(sock) {
+  // Ponte de ações do Omni (agenda, contato, fixar, favoritar): independente das chamadas.
+  if (process.env.OMNI_ACOES_TOKEN) {
+    acoes ??= new PonteDeAcoes({
+      token: process.env.OMNI_ACOES_TOKEN,
+      port: Number(process.env.OMNI_ACOES_PORTA || '8099'),
+      host: process.env.OMNI_ACOES_BIND || '127.0.0.1',
+      hostname: process.env.OMNI_ACOES_HOST || '127.0.0.1',
+    });
+    acoes.attach(sock);
+  }
   // teste: uma linha e lista de números; omni: várias linhas (Omni) e lista;
   // producao: várias linhas e qualquer contato, pela rede interna do compose.
   const modo = process.env.OMNI_CHAMADA_PONTE;
