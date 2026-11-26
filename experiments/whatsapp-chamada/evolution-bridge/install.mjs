@@ -7,7 +7,7 @@ import { PonteDeAcoes } from './acoes.mjs';
 
 let bridge;
 let acoes;
-export function attachCalls(sock) {
+export function attachCalls(sock, config) {
   // Ponte de ações do Omni (agenda, contato, fixar, favoritar): independente das chamadas.
   if (process.env.OMNI_ACOES_TOKEN) {
     acoes ??= new PonteDeAcoes({
@@ -16,7 +16,7 @@ export function attachCalls(sock) {
       host: process.env.OMNI_ACOES_BIND || '127.0.0.1',
       hostname: process.env.OMNI_ACOES_HOST || '127.0.0.1',
     });
-    acoes.attach(sock);
+    acoes.attach(sock, config?.logger);
   }
   // teste: uma linha e lista de números; omni: várias linhas (Omni) e lista;
   // producao: várias linhas e qualquer contato, pela rede interna do compose.

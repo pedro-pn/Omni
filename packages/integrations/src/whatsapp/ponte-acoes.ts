@@ -42,16 +42,29 @@ export class PonteDeAcoes {
   }
 
   /** Os contatos salvos na agenda do celular deste número (a primeira leitura baixa a agenda de novo) e o diagnóstico. */
-  async contatos(telefone: string, recarregar = false): Promise<{ contatos: ContatoSalvo[]; diagnostico: DiagnosticoDaAgenda | null }> {
+  async contatos(
+    telefone: string,
+    recarregar = false,
+  ): Promise<{ contatos: ContatoSalvo[]; completa: boolean; diagnostico: DiagnosticoDaAgenda | null; mensagens: string[] }> {
     const d = await this.chamar({ telefone, acao: "contatos", recarregar }, 90_000);
-    const lista = z.object({ contatos: z.array(z.unknown()), diagnostico: z.record(z.string(), z.number().nullable()).optional() }).safeParse(d);
+    const lista = z
+      .object({
+        contatos: z.array(z.unknown()),
+        completa: z.boolean().optional(),
+        diagnostico: z.record(z.string(), z.number().nullable()).optional(),
+        mensagens: z.array(z.string().max(500)).max(20).optional(),
+      })
+      .safeParse(d);
     if (!lista.success) throw new WhatsAppError("Resposta inesperada da ponte", 502);
     return {
       contatos: lista.data.contatos.flatMap((c) => {
         const p = contatoSchema.safeParse(c);
         return p.success ? [p.data] : [];
       }),
+      // Sem o campo (ponte antiga): só a coleção baixada valia, então a lista era completa.
+      completa: lista.data.completa ?? true,
       diagnostico: lista.data.diagnostico ?? null,
+      mensagens: lista.data.mensagens ?? [],
     };
   }
 

@@ -7,10 +7,21 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
  * Evolution, só os contatos SALVOS com o nome salvo (não o nome de perfil). Com ela, o Omni mostra
  * o nome só de quem está salvo — os outros aparecem pelo número, como no WhatsApp Web (0088).
  */
-export type ResultadoAgenda = { numeros: number; contatos: number; erros: number; vazias: number; diagnosticos: Array<DiagnosticoDaAgenda | null> };
+export type ResultadoAgenda = {
+  numeros: number;
+  contatos: number;
+  erros: number;
+  vazias: number;
+  /** Listas parciais (a coleção não baixou e não houve histórico): só acrescentadas, sem apagar nem marcar a leitura. */
+  parciais: number;
+  diagnosticos: Array<{ diagnostico: DiagnosticoDaAgenda | null; mensagens: string[] }>;
+};
 
-export async function lerAgendas(db: Db, ponte: { contatos(telefone: string): Promise<{ contatos: ContatoSalvo[]; diagnostico: DiagnosticoDaAgenda | null }> }): Promise<ResultadoAgenda> {
-  const r: ResultadoAgenda = { numeros: 0, contatos: 0, erros: 0, vazias: 0, diagnosticos: [] };
+export async function lerAgendas(
+  db: Db,
+  ponte: { contatos(telefone: string): Promise<{ contatos: ContatoSalvo[]; completa: boolean; diagnostico: DiagnosticoDaAgenda | null; mensagens: string[] }> },
+): Promise<ResultadoAgenda> {
+  const r: ResultadoAgenda = { numeros: 0, contatos: 0, erros: 0, vazias: 0, parciais: 0, diagnosticos: [] };
   const numeros = await db
     .select({ id: schema.whatsappNumbers.id, telefone: schema.whatsappNumbers.phone })
     .from(schema.whatsappNumbers)
@@ -18,12 +29,26 @@ export async function lerAgendas(db: Db, ponte: { contatos(telefone: string): Pr
   for (const n of numeros) {
     r.numeros += 1;
     try {
-      const { contatos, diagnostico } = await ponte.contatos(n.telefone!);
-      r.diagnosticos.push(diagnostico);
+      const { contatos, completa, diagnostico, mensagens } = await ponte.contatos(n.telefone!);
+      r.diagnosticos.push({ diagnostico, mensagens });
       // Agenda vazia: leitura que não veio (ou conta sem contatos na agenda do WhatsApp). Não
       // grava nem marca como lida — senão toda conversa passaria a aparecer só pelo número.
       if (!contatos.length) {
         r.vazias += 1;
+        continue;
+      }
+      // Parcial (ex.: só o contato adicionado pelo Omni depois de reiniciar a Evolution): acrescenta
+      // sem apagar o resto e sem marcar a leitura.
+      if (!completa) {
+        r.parciais += 1;
+        for (const c of contatos) {
+          const telefone = (c.telefone ?? (c.jid.endsWith("@s.whatsapp.net") ? c.jid : "")).replace(/\D/g, "");
+          await db
+            .insert(schema.whatsappContacts)
+            .values({ numberId: n.id, jid: c.jid, lid: c.lid, phone: /^\d{8,15}$/.test(telefone) ? telefone : null, savedName: c.nome })
+            .onConflictDoUpdate({ target: [schema.whatsappContacts.numberId, schema.whatsappContacts.jid], set: { savedName: c.nome, updatedAt: new Date() } });
+        }
+        r.contatos += contatos.length;
         continue;
       }
       const [s] = (await db.execute<{ n: number }>(sql`SELECT app.whatsapp_salvar_agenda(${n.id}::uuid, ${JSON.stringify(contatos)}::jsonb) AS n`)).rows;

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 const root = process.argv[2] || '/evolution/node_modules/baileys/lib';
 const patches = [
   ['Socket/index.js', '295a516071cae724d39d46fc2237a9514f825cf01ba06558c6909d9d17595bf2',
-    'return makeCommunitiesSocket(newConfig);', 'return attachCalls(makeCommunitiesSocket(newConfig));', 'attachCalls'],
+    'return makeCommunitiesSocket(newConfig);', 'return attachCalls(makeCommunitiesSocket(newConfig), newConfig);', 'attachCalls'],
   ['Socket/messages-recv.js', '8b9329ddf95fa7a1785826d8861af236f5f055ff22a5ed1ce52afdf9565d873e',
     "ws.on('CB:call', async (node) => {", "ws.on('CB:call', async (node) => {\n        if (await forwardCall(sock, node)) return;", 'forwardCall'],
 ];
