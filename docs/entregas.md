@@ -22,10 +22,10 @@ registro do que foi feito e de onde está.
 
 | Entrega | Pilar | Situação | O que foi feito |
 |---|---|---|---|
-| E06 Backup no B2 com ensaio de restauração | 3 | 🟡 congelada | Backup diário no B2, com os segredos cifrados, e ensaio automático de restauração (`docs/producao/backup.md`). Falta acompanhar as primeiras execuções automáticas e guardar a senha dos segredos no cofre. |
+| E06 Backup no B2 com ensaio de restauração | 3 | ✅ | Backup local a cada 5 h e diário no B2, com os segredos cifrados, e ensaio mensal de restauração (`docs/producao/backup.md`). Execuções automáticas conferidas e senha dos segredos no cofre da empresa em 26/11; primeiro ensaio automático em 02/12. |
 | E07 Staging | 3 | ✅ | `omnistaging.filtrovali.com.br`, pasta e banco próprios, travas de fora da produção, CSP aplicando (`docs/producao/deploy.md` §3.4). |
 | E08 Deploy repetível com volta | 1, 3 | 🟡 congelada | `deploy/publicar.sh` confere a saúde e volta sozinho se falhar. Falta ensaiar a volta de verdade no staging. |
-| E09 Alerta de erros | 12.1 | 🟡 congelada | `system_errors` (0079), job `alertas-erros`, Administração → Erros, aviso no sino. Falta ativar a notificação no celular de quem é admin. |
+| E09 Alerta de erros | 12.1 | ✅ | `system_errors` (0079), job `alertas-erros`, Administração → Erros, aviso no sino e no celular de quem é admin (testado em 26/11). |
 | E10 Limite de requisições | 10.1 | ✅ | 429 com `Retry-After` nas rotas públicas e caras (`apps/web/src/server/limites.ts`). |
 | E11 Teto diário da IA | 10.2 | ✅ | Gasto do dia somado no banco (0080); metade avisa, teto para a IA. |
 
