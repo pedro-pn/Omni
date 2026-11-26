@@ -24,8 +24,10 @@ O restante da auditoria (`audit_log`: perfis, acessos, abertura de e-mails, comp
 
 ## Em vigor (dados de negócio, migration 0081)
 
-Decididos em 26/11/2026 (E15). Missão **encerrada** = inativa e com o ciclo ou a missão fechados
-(`cycle_closed_at` ou `closed_at`); missão sem essa data nunca vence.
+Decididos em 26/11/2026 (E15). Missão **encerrada** = inativa; os 5 anos contam da primeira data que
+houver: ciclo fechado (`cycle_closed_at`), missão fechada (`closed_at`) ou inativação (`inativada_em`,
+0083). O filtroAPP só manda o status das ativas, então a inativação é a data que quase sempre existe;
+as que já estavam inativas em 26/11/2026 receberam a última atualização vinda do filtroAPP.
 
 | Dado | Prazo | Como |
 |---|---|---|

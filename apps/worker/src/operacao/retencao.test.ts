@@ -71,6 +71,10 @@ describe.skipIf(!available)("retenção dos dados de negócio", () => {
     await missao("vencida", false, "6 years");
     await missao("recente", false, "1 year");
     await missao("ativa", true, null);
+    // Inativas sem data de encerramento (o filtroAPP não manda): contam de quando ficaram inativas (0083).
+    await missao("inativa-velha", false, null);
+    await missao("inativa-nova", false, null);
+    await owner.query("UPDATE missions SET inativada_em = now() - interval '6 years' WHERE id = $1", [ids["inativa-velha"]]);
 
     // Desativação: o gatilho marca a data; a de 3 anos atrás é ajustada à mão.
     await owner.query("UPDATE people SET active = false WHERE id = ANY($1::uuid[])", [[ids.saiu_ha_tempo, ids.saiu_agora]]);
@@ -106,6 +110,17 @@ describe.skipIf(!available)("retenção dos dados de negócio", () => {
     fila: (await owner.query("SELECT sp_item_id FROM arquivos_para_apagar WHERE sp_item_id LIKE $1 ORDER BY 1", [`%-${tag}-%`])).rows.map((r) => r.sp_item_id),
   });
 
+  it("o gatilho marca quando a missão fica inativa e limpa se ela volta", async () => {
+    const data = async () => (await owner.query("SELECT inativada_em FROM missions WHERE id = $1", [ids.ativa])).rows[0].inativada_em;
+    expect(await data()).toBeNull();
+    await owner.query("UPDATE missions SET is_active = false WHERE id = $1", [ids.ativa]);
+    expect(await data()).not.toBeNull();
+    await owner.query("UPDATE missions SET is_active = true WHERE id = $1", [ids.ativa]);
+    expect(await data()).toBeNull();
+    // Missão que já chega inativa do filtroAPP também é marcada.
+    expect((await owner.query("SELECT inativada_em FROM missions WHERE id = $1", [ids["inativa-nova"]])).rows[0].inativada_em).not.toBeNull();
+  });
+
   it("o gatilho marca e desmarca a desativação", async () => {
     const data = async () => (await owner.query("SELECT deactivated_at FROM people WHERE id = $1", [ids.saiu_agora])).rows[0].deactivated_at;
     expect(await data()).not.toBeNull();
@@ -131,14 +146,14 @@ describe.skipIf(!available)("retenção dos dados de negócio", () => {
     const r = await aplicarRetencao(createWorkerDb(worker), "real", sharepoint);
     expect(r.aplicado).toBe(true);
     const depois = await estado();
-    expect(depois.mensagens).toEqual(["ativa", "recente"]);
-    expect(depois.perguntas).toBe(2);
-    expect(depois.emails).toBe(2);
-    expect(depois.reunioes).toBe(2);
+    expect(depois.mensagens).toEqual(["ativa", "inativa-nova", "recente"]);
+    expect(depois.perguntas).toBe(3);
+    expect(depois.emails).toBe(3);
+    expect(depois.reunioes).toBe(3);
     expect(depois.whatsapp).toEqual([`nova-${tag}`]);
     expect(depois.tarefas).toEqual(["pessoal-de-quem-saiu-agora"]);
     // Os dois arquivos vencidos foram apagados no SharePoint e saíram da fila.
-    expect(apagados.sort()).toEqual([`canal-${tag}-vencida`, `tarefa-${tag}-pessoal-velha`]);
+    expect(apagados.sort()).toEqual([`canal-${tag}-inativa-velha`, `canal-${tag}-vencida`, `tarefa-${tag}-pessoal-velha`]);
     expect(depois.fila).toEqual([]);
   });
 
