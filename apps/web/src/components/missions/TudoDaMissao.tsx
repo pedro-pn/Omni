@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { linhaDoTempoDaMissao, type FonteTudo, type ItemTudo } from "../../lib/tudo-fns.ts";
 import { FalhaAoCarregar } from "../comum/TentarDeNovo.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Aba "Tudo" da missão: Interno, Gerencial, WhatsApp, e-mails, reuniões e RDOs
@@ -30,7 +31,7 @@ export function TudoDaMissao({ missionId, abrirAba }: { missionId: string; abrir
   useEffect(() => {
     fim.current?.scrollIntoView({ block: "end" });
   }, [q.data?.length]);
-  if (q.isPending) return <p className="p-5 text-sm text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando className="p-5" />;
   if (q.isError) return <FalhaAoCarregar mensagem="Não foi possível carregar a linha do tempo da missão." consulta={q} />;
   if (!q.data.length) return <p className="p-5 text-sm text-muted">Nada por aqui ainda. Mensagens dos canais, do grupo do WhatsApp, e-mails e RDOs aparecem juntos nesta aba.</p>;
   let ultimoDia = "";

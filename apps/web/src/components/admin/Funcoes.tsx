@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import { atribuirFuncao, encerrarAtribuicao, listFuncoes, listPessoas, type FuncaoAdmin } from "../../lib/admin-fns.ts";
 import { Aviso, botaoPrimario, botaoSecundario, campo, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const dataBr = (iso: string) => iso.split("-").reverse().join("/");
 const hoje = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
@@ -84,7 +85,7 @@ export function Funcoes() {
     onSettled: atualizar,
   });
 
-  if (funcoes.isPending) return <p className="text-muted">Carregando funções…</p>;
+  if (funcoes.isPending) return <Carregando rotulo="Carregando funções" />;
   if (funcoes.isError) return <Aviso tipo="erro">{mensagemDeErro(funcoes.error)}</Aviso>;
 
   return (

@@ -3,6 +3,7 @@ import { Bug, Check, CircleCheck, DatabaseBackup, Gauge, Server } from "lucide-r
 
 import { errosDoSistema, marcarErroVisto, type ErroDoSistemaNaTela } from "../../lib/erros-sistema-fns.ts";
 import { Aviso, botaoSecundario, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const quando = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
@@ -25,7 +26,7 @@ export function ErrosDoSistema() {
     mutationFn: (id: string) => marcarErroVisto({ data: { id } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["admin", "erros"] }),
   });
-  if (q.isPending) return <p className="text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando />;
   if (q.isError) return <Aviso tipo="erro">{mensagemDeErro(q.error)}</Aviso>;
   const erros = q.data;
   const abertos = erros.filter((e) => !e.vistoEm).length;

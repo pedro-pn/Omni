@@ -20,6 +20,7 @@ import {
   mensagemDeErro,
 } from "../admin/ui.tsx";
 import { apagarHistoricoDoAparelho, sincronizarHistorico, useProgressoDoHistorico } from "../../lib/whatsapp-aparelho.ts";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const STATUS: Record<NumeroWhatsApp["status"], { texto: string; cor: string }> =
   {
@@ -65,7 +66,7 @@ export function MeuWhatsApp({ personId }: { personId: string }) {
     onSettled: atualizar,
   });
 
-  if (painel.isPending) return <p className="text-muted">Carregando…</p>;
+  if (painel.isPending) return <Carregando />;
   if (painel.isError)
     return <Aviso tipo="erro">{mensagemDeErro(painel.error)}</Aviso>;
   const p = painel.data;

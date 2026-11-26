@@ -1,4 +1,6 @@
-@import "tailwindcss";
+/* Só o código do app: sem isso, no Docker (sem .gitignore) o build do servidor varria o .output do
+   build do navegador e gerava outro CSS, com outro nome — a página apontava para um arquivo inexistente. */
+@import "tailwindcss" source("./");
 @import "@fontsource/poppins/400.css";
 @import "@fontsource/poppins/500.css";
 @import "@fontsource/poppins/600.css";
@@ -165,3 +167,17 @@ html.tela-unica body {
     transform: none;
   }
 }
+
+/* Carregando com o símbolo da Filtrovali (Carregando.tsx; porta do BrandLoading do filtroAPP). */
+.omni-carregando { position: relative; display: block; aspect-ratio: 1; width: 3rem; }
+.omni-carregando--sm { width: 1.5rem; }
+.omni-carregando--lg { width: clamp(3.5rem, 12vw, 5rem); }
+.omni-carregando__filtros { position: absolute; width: 0; height: 0; overflow: hidden; }
+.omni-carregando__centro, .omni-carregando__giro, .omni-carregando__seta { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.omni-carregando__giro, .omni-carregando__seta { transform-origin: 50.7% 53.7%; }
+.omni-carregando__giro { animation: omni-carregando-giro 1.8s linear infinite; }
+@keyframes omni-carregando-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .omni-carregando__giro { animation: none; } }
+/* Tema escuro: o centro (o "F" verde) fica branco, como o modo adaptativo do filtroAPP. */
+:root[data-theme="dark"] .omni-carregando { --omni-carregando-centro: brightness(0) invert(1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .omni-carregando { --omni-carregando-centro: brightness(0) invert(1); } }

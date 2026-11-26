@@ -24,6 +24,7 @@ import { MesTarefas, SemanaTarefas, type LayoutTarefas } from "./CalendarioTaref
 import { QuadroTarefas } from "./QuadroTarefas.tsx";
 import { DetalheTarefa } from "./DetalheTarefa.tsx";
 import { LoteTarefas } from "./LoteTarefas.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Tarefas (Fase 3): o Foco dentro do Omni. Captura rápida com a mesma sintaxe
@@ -798,7 +799,7 @@ export function TarefasPainel({
             Não foi possível carregar as tarefas.
           </p>
         ) : !abertas.data ? (
-          <p className="px-6 py-10 text-center text-muted">Carregando…</p>
+          <Carregando className="px-6 py-10" />
         ) : abertas.data.length === 0 && !projeto?.secoes.length ? (
           <p className="px-6 py-10 text-center text-muted">
             {vista.tipo === "delegadas" ? "Nenhuma tarefa delegada em aberto." : "Nada pendente por aqui."}

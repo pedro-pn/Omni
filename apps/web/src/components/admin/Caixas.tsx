@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import { adicionarCaixa, ativarCaixa, listCaixas } from "../../lib/admin-fns.ts";
 import { Aviso, botaoPrimario, botaoSecundario, campo, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const quando = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : "ainda não lida";
@@ -47,7 +48,7 @@ export function Caixas() {
           Adicionar
         </button>
       </form>
-      {caixas.isPending && <p className="text-muted">Carregando caixas…</p>}
+      {caixas.isPending && <Carregando rotulo="Carregando caixas" />}
       {caixas.isError && <Aviso tipo="erro">{mensagemDeErro(caixas.error)}</Aviso>}
       {caixas.data && caixas.data.length === 0 && <p className="text-muted">Nenhuma caixa cadastrada.</p>}
       {caixas.data && caixas.data.length > 0 && (

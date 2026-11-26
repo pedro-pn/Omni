@@ -30,6 +30,13 @@ describe("Limitador", () => {
 });
 
 describe("regras", () => {
+  it("o QR code renovado a cada 5 s por 20 minutos não esbarra no limite do conectar WhatsApp", () => {
+    let t = 0;
+    const l = new Limitador(() => t);
+    const regras = LIMITES_FUNCOES.conectarMeuWhatsApp!;
+    for (; t < 20 * 60_000; t += 5_000) for (const r of regras) expect(l.usar("p1", r).ok).toBe(true);
+  });
+
   it("login, API e agenda têm regra por rota; webhooks internos e arquivos estáticos ficam de fora", () => {
     expect(regraDaRota("/auth/microsoft")?.nome).toBe("login");
     expect(regraDaRota("/api/v1/tasks")?.max).toBe(120);

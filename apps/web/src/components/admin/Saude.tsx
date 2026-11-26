@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { saude, type Saude as DadosDeSaude } from "../../lib/saude-fns.ts";
 import { Aviso, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 type Nivel = "ok" | "atencao" | "problema";
 
@@ -112,7 +113,7 @@ export function Saude() {
     queryFn: () => saude(),
     refetchInterval: 60_000,
   });
-  if (q.isPending) return <p className="text-muted">Carregando…</p>;
+  if (q.isPending) return <Carregando />;
   if (q.isError) return <Aviso tipo="erro">{mensagemDeErro(q.error)}</Aviso>;
   const s = q.data;
   const n = niveis(s);

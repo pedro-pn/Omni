@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { desempenho } from "../../lib/desempenho-fns.ts";
 import { Aviso, mensagemDeErro } from "./ui.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 const PERIODOS = [
   { horas: 1, rotulo: "1 hora" },
@@ -56,7 +57,7 @@ export function Desempenho() {
       </div>
 
       {q.isPending ? (
-        <p className="text-muted">Carregando…</p>
+        <Carregando />
       ) : q.isError ? (
         <Aviso tipo="erro">{mensagemDeErro(q.error)}</Aviso>
       ) : (

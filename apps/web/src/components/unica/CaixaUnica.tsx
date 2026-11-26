@@ -38,6 +38,7 @@ import { FotoConversa, quandoCurto, useMarcarConversaLida } from "../conversas/C
 import { CartaoEmail } from "./CartaoEmail.tsx";
 import { VincularContato } from "./Vincular.tsx";
 import { useListaProgressiva } from "../comum/ListaProgressiva.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Caixa única (decisão de 17/11/2026): Conversas, E-mails, Missões e Tarefas numa lista,
@@ -244,7 +245,7 @@ export function ListaUnica({
           className="px-6 py-10"
         />
       ) : carregando && !contatos.length ? (
-        <p className="px-6 py-10 text-center text-muted">Carregando…</p>
+        <Carregando className="px-6 py-10" />
       ) : !linhas.length ? (
         <p className="px-6 py-10 text-center text-muted">
           {termo
@@ -490,7 +491,7 @@ export function PainelContatoEmail({
       )}
       <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={rolagem.caixa} onScroll={rolagem.aoRolar} className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-fundo p-5">
-        {q.isPending && <p className="text-center text-muted">Carregando…</p>}
+        {q.isPending && <Carregando />}
         {q.isError && (
           <FalhaAoCarregar
             mensagem="Não foi possível carregar os e-mails."

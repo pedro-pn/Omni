@@ -74,7 +74,7 @@ npm run build
 
 ## Regras do código
 - Idioma da interface e dos textos: **português do Brasil**, frases curtas, verbos de ação nos botões.
-- Identidade visual: `identidade-visual/design-system/` (tokens em `apps/web/src/styles.css`). Logos só pelos arquivos em `apps/web/public/marca/` — nunca recriar o logo com fonte.
+- Identidade visual: `identidade-visual/design-system/` (tokens em `apps/web/src/styles.css`). Logos só pelos arquivos em `apps/web/public/marca/` — nunca recriar o logo com fonte. Carregando: `<Carregando />` (`apps/web/src/components/comum/Carregando.tsx`, porta do `BrandLoading` do filtroAPP), não texto solto. O Tailwind só varre `src` (`source("./")` em `styles.css`) e o build confere que o CSS citado pelo servidor existe (`apps/web/scripts/conferir-assets.mjs`): no Docker, sem `.gitignore`, o build do servidor gerava outro CSS e a página abria sem estilo.
 - **Erros na tela:** server functions só devolvem ao navegador erros `ErroParaTela` (`apps/web/src/lib/erros.ts`) e mensagens de validação; o resto vira mensagem genérica pelo middleware de `apps/web/src/start.ts` (nunca vazar consulta ou parâmetros do banco).
 - **Permissão no banco, não no front.** Dados de usuário só via `withPerson(pool, personId, fn)` (`@omni/db`), com o papel `omni_app` (sem BYPASSRLS). Toda tabela nova: `ENABLE ROW LEVEL SECURITY`, políticas explícitas e teste em `packages/db/src/rls.test.ts`. Funções do esquema `app` não têm EXECUTE para PUBLIC (0013): toda função nova precisa de `GRANT EXECUTE` explícito para quem usa.
 - **Migrations aplicadas não se editam** (o executor confere sha256). Crie `NNNN_nome.sql` nova e espelhe em `packages/db/src/schema.ts`.

@@ -7,6 +7,7 @@ import type { ResumoDeEmail } from "@omni/integrations/graph";
 import { TentarDeNovo } from "../comum/TentarDeNovo.tsx";
 import { acaoLida, BotaoLida, useDeslizarLados, useMenuDeContexto } from "../comum/MarcarLida.tsx";
 import { CorpoEmail, Escrever, type Rascunho } from "../missions/EmailsMissao.tsx";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Aba E-mails: a caixa da própria pessoa, lida na hora no Microsoft 365 (pastas,
@@ -259,7 +260,7 @@ export function EmailsLista({
         </button>
       </div>
       {termo && <p className="px-4 pt-2 text-xs text-muted">Resultados em "{pasta?.nome}" para "{termo}".</p>}
-      {lista.isPending && <p className="px-6 py-10 text-center text-muted">Carregando…</p>}
+      {lista.isPending && <Carregando className="px-6 py-10" />}
       {lista.isError && (
         <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
           <p className="text-vermelho">{erroDe(lista.error)}</p>

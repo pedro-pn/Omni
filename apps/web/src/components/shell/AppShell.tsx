@@ -27,6 +27,7 @@ import { emailDoAviso } from "../../lib/caixa-fns.ts";
 import { ContatoEPrisma } from "../unica/Sugestoes.tsx";
 import { acharContato, FiltrosDaCaixa, juntarContatos, ListaUnica, PainelContatoEmail, useAgenda, useCorrespondentes, type FiltroCaixa } from "../unica/CaixaUnica.tsx";
 import type { Modulo } from "@omni/core";
+import { Carregando } from "../comum/Carregando.tsx";
 
 /**
  * Casca da tela única (protótipo: trilho 64px | lista 340px | conversa | painel 370px).
@@ -516,7 +517,7 @@ export function AppShell({ me }: { me: Me }) {
         ) : view === "tarefas" && !semAcesso && tarefas.isError ? (
           <FalhaAoCarregar mensagem="Não foi possível carregar as tarefas." consulta={tarefas} className="px-6 py-10" />
         ) : view === "tarefas" && !semAcesso ? (
-          <p className="px-6 py-10 text-center text-muted">Carregando tarefas…</p>
+          <Carregando rotulo="Carregando tarefas" className="px-6 py-10" />
         ) : view === "missoes" && !semAcesso && missoes.data ? (
           <MissionList
             missoes={missoes.data}
@@ -528,7 +529,7 @@ export function AppShell({ me }: { me: Me }) {
         ) : view === "missoes" && !semAcesso && missoes.isError ? (
           <FalhaAoCarregar mensagem="Não foi possível carregar as missões." consulta={missoes} className="px-6 py-10" />
         ) : view === "missoes" && !semAcesso ? (
-          <p className="px-6 py-10 text-center text-muted">Carregando missões…</p>
+          <Carregando rotulo="Carregando missões" className="px-6 py-10" />
         ) : view === "conversas" && !semAcesso && conversas.data ? (
           <ListaConversas
             conversas={conversas.data}
@@ -539,7 +540,7 @@ export function AppShell({ me }: { me: Me }) {
         ) : view === "conversas" && !semAcesso && conversas.isError ? (
           <FalhaAoCarregar mensagem="Não foi possível carregar as conversas." consulta={conversas} className="px-6 py-10" />
         ) : view === "conversas" && !semAcesso ? (
-          <p className="px-6 py-10 text-center text-muted">Carregando conversas…</p>
+          <Carregando rotulo="Carregando conversas" className="px-6 py-10" />
         ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-muted">
           {semAcesso ? (
