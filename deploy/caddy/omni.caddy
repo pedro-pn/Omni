@@ -5,6 +5,12 @@
 # --- Omni (staging; Docker publica em 172.17.0.1:8085) ----------------------
 omnistaging.filtrovali.com.br {
 	encode zstd gzip
+	# Rotas chamadas só pela rede interna do Docker (http://web:3000): fechadas para a internet.
+	# Lista em apps/web/src/server/rotas-publicas.ts (exposicao "interna").
+	@interno path /api/whatsapp/webhook /api/chamadas/eventos
+	handle @interno {
+		respond 404
+	}
 	# Áudio das chamadas (WebSocket) direto no serviço de voz; só este caminho (porta 8088).
 	handle /omni/audio {
 		reverse_proxy host.docker.internal:8088
@@ -25,6 +31,12 @@ omnistaging.filtrovali.com.br {
 # --- Omni (produção; Docker publica em 172.17.0.1:8084) ---------------------
 omni.filtrovali.com.br {
 	encode zstd gzip
+	# Rotas chamadas só pela rede interna do Docker (http://web:3000): fechadas para a internet.
+	# Lista em apps/web/src/server/rotas-publicas.ts (exposicao "interna").
+	@interno path /api/whatsapp/webhook /api/chamadas/eventos
+	handle @interno {
+		respond 404
+	}
 	# Áudio das chamadas (WebSocket) direto no serviço de voz; só este caminho (porta 8086).
 	handle /omni/audio {
 		reverse_proxy host.docker.internal:8086

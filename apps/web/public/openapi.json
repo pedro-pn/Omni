@@ -3,7 +3,7 @@
   "info": {
     "title": "Omni — API de Tarefas",
     "version": "1.0.0",
-    "description": "API das tarefas do Omni (caixa pessoal, projetos, tarefas, seções, comentários e histórico), compatível com a API do Foco: mesmas rotas, campos e erros. Chave pessoal em Meu perfil → API e automações. Diferenças: concluir tarefa que repete avança para a próxima data; reminder_offset_minutes define o lembrete no sino; GET /activity aceita task_id."
+    "description": "API das tarefas do Omni (caixa pessoal, projetos, tarefas, seções, comentários e histórico), compatível com a API do Foco: mesmas rotas, campos e erros. Chave pessoal em Meu perfil → API e automações. Diferenças: concluir tarefa que repete avança para a próxima data; reminder_offset_minutes define o lembrete no sino; GET /activity aceita task_id. Autorização do Prisma (PKCE S256, cliente `prisma`, só leitura das próprias tarefas): 1) o Prisma abre `GET /?integracao=prisma&client_id=prisma&redirect_uri=https://prismacrm.filtrovali.com.br/&response_type=code&code_challenge=<S256, 43 caracteres>&code_challenge_method=S256&state=<64 hex>&email=<e-mail da conta>` no navegador; 2) a pessoa, logada no Omni com o mesmo e-mail, autoriza e volta para `https://prismacrm.filtrovali.com.br/#foco-callback?state=…&code=…` (ou `error=access_denied`); o código vale 5 minutos e uma vez só; 3) o servidor do Prisma troca o código em `POST /api/prisma-authorization/token` e recebe uma chave `foco_live_…` com o escopo `tasks:read:self` (só `GET /tasks` e `GET /tasks/{id}` das tarefas em que a pessoa é responsável; o resto responde 403 `prisma_read_only`); 4) `POST /api/prisma-authorization/revoke` revoga a chave. A pessoa também revoga em Meu perfil → API e automações."
   },
   "servers": [
     {
@@ -147,6 +147,24 @@
             "minimum": 0,
             "maximum": 10080,
             "description": "Lembrete no sino, minutos antes da data/hora da tarefa."
+          }
+        }
+      },
+      "OAuthError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "invalid_grant",
+              "invalid_origin",
+              "method_not_allowed",
+              "temporarily_unavailable"
+            ]
           }
         }
       }
@@ -479,6 +497,272 @@
           }
         }
       }
+    },
+    "/api/prisma-authorization/token": {
+      "servers": [
+        {
+          "url": "https://omni.filtrovali.com.br",
+          "description": "Produção"
+        },
+        {
+          "url": "https://foco.filtrovali.com.br",
+          "description": "Endereço do Foco (aponta para o Omni após a migração)"
+        }
+      ],
+      "post": {
+        "operationId": "prismaToken",
+        "tags": [
+          "Autorização do Prisma"
+        ],
+        "security": [],
+        "summary": "Troca o código de autorização do Prisma por uma chave de leitura",
+        "description": "Chamada pelo servidor do Prisma (sem cookie). Se vier `Origin`, precisa ser `https://prismacrm.filtrovali.com.br`. Corpo até 4 KB. O código é de uso único: vencido, já usado, de outra conta ou com `code_verifier` que não confere responde `invalid_grant`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "grant_type",
+                  "client_id",
+                  "code",
+                  "code_verifier",
+                  "redirect_uri"
+                ],
+                "properties": {
+                  "grant_type": {
+                    "type": "string",
+                    "const": "authorization_code"
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "const": "prisma"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._~-]{43,128}$"
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "const": "https://prismacrm.filtrovali.com.br/"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chave criada",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "scope",
+                    "email"
+                  ],
+                  "properties": {
+                    "access_token": {
+                      "type": "string",
+                      "pattern": "^foco_live_[a-f0-9]{48}$"
+                    },
+                    "token_type": {
+                      "type": "string",
+                      "const": "Bearer"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "const": "tasks:read:self"
+                    },
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "description": "E-mail da conta no Omni, em minúsculas"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request` (corpo inválido) ou `invalid_grant` (código inválido, vencido ou já usado)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`invalid_origin`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite de 30 por minuto por IP (`Retry-After`)"
+          },
+          "503": {
+            "description": "`temporarily_unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prisma-authorization/revoke": {
+      "servers": [
+        {
+          "url": "https://omni.filtrovali.com.br",
+          "description": "Produção"
+        },
+        {
+          "url": "https://foco.filtrovali.com.br",
+          "description": "Endereço do Foco (aponta para o Omni após a migração)"
+        }
+      ],
+      "post": {
+        "operationId": "prismaRevoke",
+        "tags": [
+          "Autorização do Prisma"
+        ],
+        "security": [],
+        "summary": "Revoga uma chave criada pela autorização do Prisma",
+        "description": "Chamada pelo servidor do Prisma com a própria chave no corpo. Só revoga chaves do cliente `prisma`; chave desconhecida também responde `revoked: true` (não revela se existia).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revogada",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "revoked"
+                  ],
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`invalid_origin`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite de 30 por minuto por IP (`Retry-After`)"
+          },
+          "503": {
+            "description": "`temporarily_unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Autorização do Prisma",
+      "description": "Conexão por pessoa (PKCE), mesmo contrato do Foco."
+    }
+  ]
 }

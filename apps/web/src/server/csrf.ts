@@ -15,7 +15,7 @@
 
 const METODOS_SEGUROS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-const DE_SERVIDOR = [
+export const DE_SERVIDOR = [
   "/api/v1/", // chave de API (Bearer), chamada pelo Prisma e integrações
   "/api/prisma-authorization/", // troca PKCE com o servidor do Prisma (conferência de origem própria)
   "/api/whatsapp/webhook", // Evolution, pela rede interna, com segredo no cabeçalho
