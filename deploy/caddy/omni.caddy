@@ -2,9 +2,63 @@
 # (filtroAPP-main/deploy/infra-proxy). Publicar o DNS antes de adicionar cada bloco.
 # Passo a passo: docs/producao/deploy.md.
 
+# Página de manutenção do Omni (E24): quando o web não responde (publicação, volta de versão,
+# processo parado ou deploy/manutencao.sh on), o Caddy devolve 503 com esta página, sem nada de fora.
+# Na API, JSON. Fonte: deploy/caddy/omni.caddy no repositório do Omni (o teste
+# apps/web/src/server/manutencao.test.ts confere); copie igual para o Caddyfile do infra-proxy.
+(omni_manutencao) {
+	# Sem códigos no handle_errors: no Caddy 2.8, com códigos ele descarta os matchers de dentro.
+	handle_errors {
+		@omni_api expression `{err.status_code} in [502, 503, 504] && path('/api/*')`
+		@omni_pagina expression `{err.status_code} in [502, 503, 504] && !path('/api/*')`
+		handle @omni_api {
+			header Retry-After 30
+			header Cache-Control no-store
+			header Content-Type "application/json; charset=utf-8"
+			respond `{"erro":"manutencao","mensagem":"O Omni está em manutenção. Tente de novo em instantes."}` 503
+		}
+		handle @omni_pagina {
+			header Retry-After 30
+			header Cache-Control no-store
+			header Content-Type "text/html; charset=utf-8"
+			respond <<HTML
+		<!doctype html>
+		<html lang="pt-BR">
+		<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<meta http-equiv="refresh" content="30">
+		<meta name="robots" content="noindex">
+		<title>Omni em manutenção</title>
+		<style>
+		:root{--fundo:#e8e8e8;--superficie:#fff;--ink:#1b211d;--muted:#5f6661;--linha:#dcdcdc;--floresta:#30503a;color-scheme:light dark}
+		@media (prefers-color-scheme:dark){:root{--fundo:#0f1210;--superficie:#171b18;--ink:#e8e8e8;--muted:#a0a7a2;--linha:#2c332e;--floresta:#8fbf9d}}
+		*{box-sizing:border-box}
+		body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--fundo);color:var(--ink);font-family:Poppins,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+		main{max-width:440px;width:100%;background:var(--superficie);border:1px solid var(--linha);border-radius:12px;padding:32px 24px;text-align:center}
+		img{width:64px;height:64px;border-radius:14px}
+		h1{font-size:1.25rem;margin:16px 0 8px;color:var(--floresta)}
+		p{margin:8px 0;line-height:1.5;color:var(--muted)}
+		</style>
+		</head>
+		<body>
+		<main>
+		<img src="data:image/png;base64,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" alt="Omni">
+		<h1>O Omni está em manutenção</h1>
+		<p>Estamos atualizando o sistema. Ele volta em instantes.</p>
+		<p>Esta página tenta de novo sozinha a cada 30 segundos.</p>
+		</main>
+		</body>
+		</html>
+		HTML 503
+		}
+	}
+}
+
 # --- Omni (staging; Docker publica em 172.17.0.1:8085) ----------------------
 omnistaging.filtrovali.com.br {
 	encode zstd gzip
+	import omni_manutencao
 	# Rotas chamadas só pela rede interna do Docker (http://web:3000): fechadas para a internet.
 	# Lista em apps/web/src/server/rotas-publicas.ts (exposicao "interna").
 	@interno path /api/whatsapp/webhook /api/chamadas/eventos
@@ -31,6 +85,7 @@ omnistaging.filtrovali.com.br {
 # --- Omni (produção; Docker publica em 172.17.0.1:8084) ---------------------
 omni.filtrovali.com.br {
 	encode zstd gzip
+	import omni_manutencao
 	# Rotas chamadas só pela rede interna do Docker (http://web:3000): fechadas para a internet.
 	# Lista em apps/web/src/server/rotas-publicas.ts (exposicao "interna").
 	@interno path /api/whatsapp/webhook /api/chamadas/eventos

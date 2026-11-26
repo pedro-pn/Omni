@@ -268,13 +268,31 @@ omni-stg stop                     # para sem apagar nada;  "down -v" APAGA o ban
 deploy/backup.sh omni-staging deploy/.env.staging
 # Backup para fora da VPS (B2, horário/diário/mensal) e ensaio de restauração: docs/producao/backup.md
 
-# Restaurar um backup (com o web e o worker parados)
+# Restaurar um backup (com o web e o worker parados: deploy/manutencao.sh <ambiente> on "motivo")
 omni-stg stop web worker
 omni-stg exec -T postgres pg_restore -U postgres -d omni --clean --if-exists < ~/backups/omni-staging/omni-AAAAMMDD-HHMM.dump
 omni-stg up -d --wait
 ```
 
 **Voltar uma versão:** `deploy/publicar.sh <ambiente> <commit anterior>` (mesma conferência). Se a conferência de uma publicação falha, o script já volta sozinho o código e as imagens anteriores. As migrations só avançam: se a versão nova aplicou migration, o registro avisa e o banco precisa ser restaurado do backup feito no início da publicação. O repositório da VPS fica no commit publicado (HEAD destacado); não use `git pull` nele.
+
+**Página de manutenção (E24):** quando o web não responde (publicação, volta de versão, processo
+parado), o Caddy devolve 503 com a página "O Omni está em manutenção", que tenta de novo a cada 30 s.
+Na `/api/*`, a resposta é JSON `{"erro":"manutencao"}`. As duas levam `Retry-After: 30`. O trecho
+`(omni_manutencao)` fica em `deploy/caddy/omni.caddy` (`import omni_manutencao` nos dois blocos) e
+vai igual para o Caddyfile do `infra-proxy`. Mudou a página: atualize os dois. O teste
+`apps/web/src/server/manutencao.test.ts` confere que ela não carrega nada de fora.
+
+**Manutenção de propósito** (restaurar backup, migração longa, incidente):
+
+```bash
+deploy/manutencao.sh producao on "restaurando o backup"   # para web e worker; a página aparece
+deploy/manutencao.sh producao status
+deploy/manutencao.sh producao off                          # sobe os dois e confere /api/saude
+```
+
+Com a manutenção ligada, o `publicar.sh` recusa publicar, porque subiria o web no meio do serviço. Para
+publicar a correção e encerrar a manutenção junto: `deploy/publicar.sh producao --encerrar-manutencao`.
 
 **Conferir a versão no ar:** `curl -s https://<domínio>/api/saude` → `{"status":"ok","banco":"ok","versao":"<commit>"}`.
 

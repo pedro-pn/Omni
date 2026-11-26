@@ -6,6 +6,7 @@
 #   deploy/publicar.sh producao                # publica origin/master na produção
 #   deploy/publicar.sh producao <commit>       # publica um commit específico (ex.: voltar versão)
 #   deploy/publicar.sh producao --sem-backup   # pula a cópia local do banco (só em emergência)
+#   deploy/publicar.sh producao --encerrar-manutencao   # publica durante a manutenção manual e a encerra
 #   OMNI_DIR=~/apps/Omni sh /tmp/publicar.sh producao   # rodando de uma cópia do script
 #
 # Passos: confere a árvore limpa → backup do banco → guarda as imagens atuais → leva o código ao
@@ -19,9 +20,11 @@ AMBIENTE="${1:?ambiente: staging ou producao}"
 shift
 ALVO="origin/master"
 BACKUP=sim
+ENCERRAR_MANUTENCAO=nao
 for arg in "$@"; do
   case "$arg" in
     --sem-backup) BACKUP=nao ;;
+    --encerrar-manutencao) ENCERRAR_MANUTENCAO=sim ;;
     *) ALVO="$arg" ;;
   esac
 done
@@ -55,6 +58,15 @@ COMPOSE="docker compose -p ${PROJETO} -f deploy/docker-compose.prod.yml --env-fi
 REGISTRO="${HOME}/omni-publicacoes.log"
 
 registrar() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${AMBIENTE} $*" | tee -a "$REGISTRO"; }
+
+# Manutenção manual ligada (deploy/manutencao.sh, E24): publicar sobe o web e o worker e a encerraria
+# sem querer (ex.: no meio de uma restauração). Só com --encerrar-manutencao.
+SINAL="${HOME}/omni-manutencao-${AMBIENTE}"
+if [ -f "$SINAL" ] && [ "$ENCERRAR_MANUTENCAO" != sim ]; then
+  echo "manutenção ligada desde: $(cat "$SINAL")" >&2
+  echo "publicar encerraria a manutenção; termine com deploy/manutencao.sh ${AMBIENTE} off ou use --encerrar-manutencao" >&2
+  exit 1
+fi
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "há mudanças locais no repositório da VPS; publique só o que está no Git" >&2
@@ -106,7 +118,10 @@ i=0
 while [ $i -lt 30 ]; do
   RESP="$(wget -qO- "$SAUDE" 2>/dev/null || true)"
   case "$RESP" in
-    *'"status":"ok"'*"\"versao\":\"${NOVO}\""*) registrar "publicado ${CURTO_NOVO} (saúde ok)"; exit 0 ;;
+    *'"status":"ok"'*"\"versao\":\"${NOVO}\""*)
+      registrar "publicado ${CURTO_NOVO} (saúde ok)"
+      if [ -f "$SINAL" ]; then rm -f "$SINAL"; registrar "manutenção encerrada pela publicação"; fi
+      exit 0 ;;
   esac
   i=$((i + 1))
   sleep 2
