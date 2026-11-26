@@ -25,6 +25,11 @@ contêineres omni-* e omni-staging-*  ──stdout──▶  Docker rootless do 
 - Vão `web`, `worker`, `postgres`, `migrate` e o próprio agente, da produção e do staging.
 - **Não vão** a Evolution (WhatsApp), o Redis dela e o serviço de voz: os logs deles podem trazer
   conteúdo de mensagens e telefones.
+  - Eles saem **na descoberta** (`discovery.relabel "so_omni"`). Um `drop` nas `relabel_rules` do
+    `loki.source.docker` não descarta a linha: só tira os rótulos, e ela seguiria para o envio.
+  - Isso aconteceu na primeira ativação, em 26/11/2026, por cerca de 1 minuto: logs desses
+    contêineres chegaram ao Grafana só com `app="omni"` e `host`, já mascarados. A segunda trava, no
+    `loki.process`, descarta toda linha sem o rótulo `service`.
 - Antes de enviar, o Alloy mascara:
 
   | Dado | Vira |
