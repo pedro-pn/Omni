@@ -35,12 +35,13 @@ function escutarLog(logger, destino) {
 }
 
 export class PonteDeAcoes {
-  constructor({ token, port = 8099, host = '127.0.0.1', hostname = '127.0.0.1', escutar = true }) {
+  constructor({ token, port = 8099, host = '127.0.0.1', hostname = '127.0.0.1', escutar = true, esperaDoBuffer = 500 }) {
     if (typeof token !== 'string' || token.length < 32 || !Number.isInteger(port) || port < 1024 || port > 65535 ||
         !['127.0.0.1', '0.0.0.0'].includes(host) || !/^[a-z0-9][a-z0-9.-]{0,62}$/.test(hostname)) throw new Error('invalid_acoes_config');
     this.token = token;
     this.esperado = `${hostname}:${port}`;
     this.linhas = new Map(); // ws -> { sock, contatos: Map<jid, contato>, sincronizado }
+    this.esperaDoBuffer = esperaDoBuffer;
     if (escutar) {
       this.http = createServer((req, res) => void this.atender(req, res));
       this.http.listen(port, host);
@@ -51,23 +52,27 @@ export class PonteDeAcoes {
     const linha = { sock, logger, contatos: new Map(), sincronizado: false, eventos: 0, comNome: 0, historico: false };
     this.linhas.set(sock.ws, linha);
     // Só o que vem da agenda (contactAction e o histórico) traz `name`; o nome de perfil vem em `notify`.
-    const guardar = (lista) => {
+    // Apagar só pela agenda (contacts.upsert vem do contactAction da coleção dos contatos): o
+    // histórico das conversas traz um "contato" por conversa com `name` vazio quando a conversa não
+    // tem o nome — tratado como apagado, tirava da lista quem a agenda tinha acabado de trazer.
+    const guardar = (lista, podeApagar) => {
       for (const c of lista ?? []) {
         linha.eventos += 1;
-        if (!c?.id || !Object.prototype.hasOwnProperty.call(c, 'name')) continue;
+        if (!c?.id || !PESSOA.test(String(c.id)) || !Object.prototype.hasOwnProperty.call(c, 'name')) continue;
         if (c.name) linha.comNome += 1;
         const nome = typeof c.name === 'string' ? c.name.trim().slice(0, 120) : '';
         if (nome && digitos(nome) !== digitos(String(c.id).split('@')[0])) {
-          linha.contatos.set(c.id, { jid: c.id, lid: c.lid ?? null, telefone: c.phoneNumber ?? null, nome });
-        } else linha.contatos.delete(c.id);
+          const antes = linha.contatos.get(c.id);
+          linha.contatos.set(c.id, { jid: c.id, lid: c.lid ?? antes?.lid ?? null, telefone: c.phoneNumber ?? antes?.telefone ?? null, nome });
+        } else if (podeApagar) linha.contatos.delete(c.id);
       }
     };
-    sock.ev.on('contacts.upsert', guardar);
-    sock.ev.on('contacts.update', guardar);
-    // Histórico do pareamento: traz os contatos com o nome da agenda.
+    sock.ev.on('contacts.upsert', (l) => guardar(l, true));
+    sock.ev.on('contacts.update', (l) => guardar(l, false));
+    // Histórico do pareamento: traz os contatos com o nome da agenda (só acrescenta).
     sock.ev.on('messaging-history.set', (h) => {
       if (Array.isArray(h?.contacts) && h.contacts.length) linha.historico = true;
-      guardar(h?.contacts);
+      guardar(h?.contacts, false);
     });
     sock.ev.on('connection.update', (u) => {
       if (u.connection === 'close') this.linhas.delete(sock.ws);
@@ -101,6 +106,10 @@ export class PonteDeAcoes {
       } finally {
         desfazer();
       }
+      // O Baileys segura os eventos da coleção num buffer e só os solta ~100 ms depois do resync:
+      // sem esperar, a primeira leitura voltava sem os contatos que acabaram de chegar.
+      await new Promise((ok) => setTimeout(ok, this.esperaDoBuffer));
+      if (linha.sock.ev.isBuffering?.()) linha.sock.ev.flush?.();
       const v = await linha.sock.authState.keys.get('app-state-sync-version', ['critical_unblock_low']);
       versao = v?.critical_unblock_low?.version ?? 0;
       linha.sincronizado = versao > 0;

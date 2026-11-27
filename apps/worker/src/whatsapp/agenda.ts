@@ -14,6 +14,8 @@ export type ResultadoAgenda = {
   vazias: number;
   /** Listas parciais (a coleção não baixou e não houve histórico): só acrescentadas, sem apagar nem marcar a leitura. */
   parciais: number;
+  /** "Completas" bem menores que a agenda guardada: só acrescentadas (a ponte pode ter perdido contatos). */
+  encolhidas: number;
   diagnosticos: Array<{ diagnostico: DiagnosticoDaAgenda | null; mensagens: string[] }>;
 };
 
@@ -21,7 +23,7 @@ export async function lerAgendas(
   db: Db,
   ponte: { contatos(telefone: string): Promise<{ contatos: ContatoSalvo[]; completa: boolean; diagnostico: DiagnosticoDaAgenda | null; mensagens: string[] }> },
 ): Promise<ResultadoAgenda> {
-  const r: ResultadoAgenda = { numeros: 0, contatos: 0, erros: 0, vazias: 0, parciais: 0, diagnosticos: [] };
+  const r: ResultadoAgenda = { numeros: 0, contatos: 0, erros: 0, vazias: 0, parciais: 0, encolhidas: 0, diagnosticos: [] };
   const numeros = await db
     .select({ id: schema.whatsappNumbers.id, telefone: schema.whatsappNumbers.phone })
     .from(schema.whatsappNumbers)
@@ -41,14 +43,17 @@ export async function lerAgendas(
       // sem apagar o resto e sem marcar a leitura.
       if (!completa) {
         r.parciais += 1;
-        for (const c of contatos) {
-          const telefone = (c.telefone ?? (c.jid.endsWith("@s.whatsapp.net") ? c.jid : "")).replace(/\D/g, "");
-          await db
-            .insert(schema.whatsappContacts)
-            .values({ numberId: n.id, jid: c.jid, lid: c.lid, phone: /^\d{8,15}$/.test(telefone) ? telefone : null, savedName: c.nome })
-            .onConflictDoUpdate({ target: [schema.whatsappContacts.numberId, schema.whatsappContacts.jid], set: { savedName: c.nome, updatedAt: new Date() } });
-        }
-        r.contatos += contatos.length;
+        r.contatos += await acrescentar(db, n.id, contatos);
+        continue;
+      }
+      // "Completa", mas bem menor que a guardada: a ponte perdeu contatos (já aconteceu: o histórico
+      // das conversas apagava salvos). Só acrescenta; quem saiu da agenda de fato sai na próxima
+      // leitura do zero (Evolution reiniciada) que vier do tamanho certo.
+      const [guardados] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.whatsappContacts).where(eq(schema.whatsappContacts.numberId, n.id));
+      const antes = Number(guardados?.n ?? 0);
+      if (antes >= 20 && contatos.length < antes * 0.8) {
+        r.encolhidas += 1;
+        r.contatos += await acrescentar(db, n.id, contatos);
         continue;
       }
       const [s] = (await db.execute<{ n: number }>(sql`SELECT app.whatsapp_salvar_agenda(${n.id}::uuid, ${JSON.stringify(contatos)}::jsonb) AS n`)).rows;
@@ -60,4 +65,16 @@ export async function lerAgendas(
     }
   }
   return r;
+}
+
+/** Acrescenta (ou atualiza o nome) sem apagar os outros nem marcar a leitura. */
+async function acrescentar(db: Db, numberId: string, contatos: ContatoSalvo[]): Promise<number> {
+  for (const c of contatos) {
+    const telefone = (c.telefone ?? (c.jid.endsWith("@s.whatsapp.net") ? c.jid : "")).replace(/\D/g, "");
+    await db
+      .insert(schema.whatsappContacts)
+      .values({ numberId, jid: c.jid, lid: c.lid, phone: /^\d{8,15}$/.test(telefone) ? telefone : null, savedName: c.nome })
+      .onConflictDoUpdate({ target: [schema.whatsappContacts.numberId, schema.whatsappContacts.jid], set: { savedName: c.nome, updatedAt: new Date() } });
+  }
+  return contatos.length;
 }

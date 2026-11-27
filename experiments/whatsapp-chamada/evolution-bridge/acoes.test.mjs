@@ -114,3 +114,34 @@ test('lids: o telefone de cada @lid pelo mapeamento da sessão e o meu @lid; nad
   await assert.rejects(p.executar({ telefone: '5547900000001', acao: 'lids', lids: 'x' }), /dados_invalidos/);
 });
 
+test('o histórico das conversas não apaga quem a agenda trouxe; grupos não entram como contato', async () => {
+  const p = new PonteDeAcoes({ token: TOKEN, escutar: false });
+  const s = sessao('5547900000001');
+  p.attach(s.sock);
+  await p.executar({ telefone: '5547900000001', acao: 'contatos' }); // a agenda traz Ana Campo
+  s.ev.emit('messaging-history.set', {
+    contacts: [
+      { id: '5547900000011@s.whatsapp.net', name: undefined, lid: '222222222222222@lid' }, // conversa sem nome no histórico
+      { id: '120363000000000001@g.us', name: 'Obra Fictícia' }, // grupo
+      { id: '5547900000016@s.whatsapp.net', name: 'Eva Salva' },
+    ],
+  });
+  const r = await p.executar({ telefone: '5547900000001', acao: 'contatos' });
+  assert.deepEqual(r.contatos.map((c) => c.nome).sort(), ['Ana Campo', 'Eva Salva']);
+  // O que a agenda já sabia fica (o @lid do histórico só completa).
+  assert.equal(r.contatos.find((c) => c.nome === 'Ana Campo').telefone, '5547900000011@s.whatsapp.net');
+});
+
+test('a leitura espera o Baileys soltar os eventos da coleção (buffer) antes de responder', async () => {
+  const p = new PonteDeAcoes({ token: TOKEN, escutar: false, esperaDoBuffer: 50 });
+  const s = sessao('5547900000001');
+  // Como o Baileys: o resync termina e os contatos chegam 20 ms depois (flush do buffer).
+  s.sock.resyncAppState = async () => {
+    setTimeout(() => s.ev.emit('contacts.upsert', [{ id: '5547900000017@s.whatsapp.net', name: 'Fábio Tarde' }]), 20);
+  };
+  p.attach(s.sock);
+  const r = await p.executar({ telefone: '5547900000001', acao: 'contatos' });
+  assert.deepEqual(r.contatos.map((c) => c.nome), ['Fábio Tarde']);
+  assert.equal(r.diagnostico.eventosNaLeitura, 1);
+});
+
