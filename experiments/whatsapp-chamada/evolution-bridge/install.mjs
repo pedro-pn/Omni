@@ -16,7 +16,7 @@ export function attachCalls(sock, config) {
       host: process.env.OMNI_ACOES_BIND || '127.0.0.1',
       hostname: process.env.OMNI_ACOES_HOST || '127.0.0.1',
     });
-    acoes.attach(sock, config?.logger);
+    acoes.attach(sock);
   }
   // teste: uma linha e lista de números; omni: várias linhas (Omni) e lista;
   // producao: várias linhas e qualquer contato, pela rede interna do compose.

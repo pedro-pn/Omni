@@ -253,7 +253,7 @@ export const salvarContatoWhatsApp = createServerFn({ method: "POST" })
       chatId: z.uuid().optional(),
     }),
   )
-  .handler(async ({ data }): Promise<{ noCelular: boolean }> => {
+  .handler(async ({ data }): Promise<{ noCelular: boolean; aviso: string | null }> => {
     const personId = await pessoa();
     const [numero] = await withPerson(getPool(), personId, (db) =>
       db
@@ -265,12 +265,18 @@ export const salvarContatoWhatsApp = createServerFn({ method: "POST" })
     const jid = `${data.telefone}@s.whatsapp.net`;
     const ponte = getPonteDeAcoes();
     let noCelular = false;
+    let aviso: string | null = null;
     if (getEnv().WHATSAPP_ENVIO === "real" && ponte && numero.status === "conectado" && numero.telefone) {
       try {
         await ponte.salvarContato(numero.telefone, jid, data.nome);
         noCelular = true;
-      } catch {
-        throw new ErroParaTela("O WhatsApp não salvou o contato agora. Confira se o número está conectado e tente de novo.");
+      } catch (error) {
+        // A agenda do WhatsApp deste número não está sincronizada: mandar assim poderia estragar os
+        // dados no servidor do WhatsApp (a ponte recusa). Fica no Omni.
+        if ((error as { code?: string }).code !== "colecao_fora_de_sincronia") {
+          throw new ErroParaTela("O WhatsApp não salvou o contato agora. Confira se o número está conectado e tente de novo.");
+        }
+        aviso = "Contato salvo no Omni. A agenda do WhatsApp deste número não está sincronizada; salve também no celular.";
       }
     }
     await withPerson(getPool(), personId, async (db) => {
@@ -281,6 +287,6 @@ export const salvarContatoWhatsApp = createServerFn({ method: "POST" })
       // Fora do celular (ensaio, ponte desligada), o nome também fica na conversa (nome dado no Omni).
       if (!noCelular && data.chatId) await db.execute(sql`SELECT app.whatsapp_renomear_contato(${data.chatId}::uuid, ${data.nome})`);
     });
-    return { noCelular };
+    return { noCelular, aviso };
   });
 

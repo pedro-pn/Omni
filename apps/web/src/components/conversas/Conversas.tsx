@@ -1876,10 +1876,10 @@ function NomeDaConversa({ conversa }: { conversa: ConversaResumo }) {
     mutationFn: async (nome: string) =>
       conversa.telefone
         ? salvarContatoWhatsApp({ data: { numberId: conversa.numero.id, telefone: conversa.telefone, nome, chatId: conversa.id } })
-        : renomearContato({ data: { chatId: conversa.id, nome } }).then(() => ({ noCelular: false })),
+        : renomearContato({ data: { chatId: conversa.id, nome } }).then(() => ({ noCelular: false, aviso: null as string | null })),
     onSuccess: (r) => {
       setEditando(false);
-      setAviso(r.noCelular ? null : "Salvo no Omni (não foi para a agenda do celular neste ambiente).");
+      setAviso(r.noCelular ? null : (r.aviso ?? "Salvo no Omni (não foi para a agenda do celular neste ambiente)."));
       void qc.invalidateQueries({ queryKey: ["whatsapp", "conversas"] });
     },
   });

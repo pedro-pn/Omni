@@ -241,7 +241,7 @@ services:
       dockerfile: Dockerfile.chamadas
       additional_contexts:
         ponte: ../experiments/whatsapp-chamada/evolution-bridge
-    image: omni-evolution:2.3.7-chamadas.8
+    image: omni-evolution:2.3.7-chamadas.9
     restart: unless-stopped
     environment:
       # Ponte das chamadas (perfil "chamadas"): "producao" (qualquer contato) ou "omni"
