@@ -25,13 +25,14 @@ async function disponivel() {
 }
 const available = await disponivel();
 
-/** A consulta da caixa única antes do resumo (0067), para comparar. */
+/** A consulta da caixa única antes do resumo (0067), para comparar — com a regra da 0092 (recebido só com o dono no Para). */
 const ANTIGA = `
   WITH base AS (
     SELECT folder, from_address, from_name, to_recipients, subject, preview, coalesce(received_at, sent_at, created_at) AS em, is_read
       FROM mail_items WHERE owner_person_id = $1
   ), pares AS (
-    SELECT from_address AS endereco, from_name AS nome, em, subject, preview, (NOT is_read) AS nao_lido FROM base WHERE folder = 'inbox' AND from_address IS NOT NULL
+    SELECT from_address AS endereco, from_name AS nome, em, subject, preview, (NOT is_read) AS nao_lido FROM base
+     WHERE folder = 'inbox' AND from_address IS NOT NULL AND EXISTS (SELECT 1 FROM jsonb_array_elements(to_recipients) r WHERE lower(r->>'endereco') = $2)
     UNION ALL
     SELECT lower(r->>'endereco'), r->>'nome', em, subject, preview, false FROM base, jsonb_array_elements(to_recipients) r WHERE folder = 'sentitems'
   )
@@ -60,11 +61,14 @@ describe.skipIf(!available)("resumo por correspondente (caixa única)", () => {
     await owner?.end();
   });
 
-  const item = (g: string, pasta: "inbox" | "sentitems", de: [string, string], para: [string, string][], quando: string, lido = true) =>
+  const item = (g: string, pasta: "inbox" | "sentitems", de: [string, string], para: [string, string][], quando: string, lido = true, cc: [string, string][] = []) =>
     owner.query(
-      `INSERT INTO mail_items (mailbox_id, owner_person_id, graph_id, folder, from_name, from_address, to_recipients, addresses, subject, preview, received_at, sent_at, is_read)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, 'prévia ' || $9, $10, $10, $11)`,
-      [caixa, dono, `${tag}-${g}`, pasta, de[0], de[1], JSON.stringify(para.map(([nome, endereco]) => ({ nome, endereco }))), [de[1], ...para.map((p) => p[1])], `assunto ${g}`, quando, lido],
+      `INSERT INTO mail_items (mailbox_id, owner_person_id, graph_id, folder, from_name, from_address, to_recipients, cc_recipients, addresses, subject, preview, received_at, sent_at, is_read)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $12::jsonb, $8, $9, 'prévia ' || $9, $10, $10, $11)`,
+      [
+        caixa, dono, `${tag}-${g}`, pasta, de[0], de[1], JSON.stringify(para.map(([nome, endereco]) => ({ nome, endereco }))),
+        [de[1], ...para.map((p) => p[1]), ...cc.map((p) => p[1])], `assunto ${g}`, quando, lido, JSON.stringify(cc.map(([nome, endereco]) => ({ nome, endereco }))),
+      ],
     );
   const resumo = async () =>
     (await owner.query("SELECT address, name, last_subject, unread, total FROM mail_correspondents WHERE owner_person_id = $1 ORDER BY address", [dono])).rows;
@@ -90,4 +94,34 @@ describe.skipIf(!available)("resumo por correspondente (caixa única)", () => {
     expect(await resumo()).toEqual(await antiga());
     expect((await resumo()).map((r) => r.address)).toEqual(["ana@cli.exemplo", "bruno@cli.exemplo"]);
   });
+
+  it("e-mail na conversa entre duas pessoas: um mandou e o outro está no Para; cópia não conta (0092)", async () => {
+    const eu: [string, string] = ["Dono", email];
+    const jo: [string, string] = ["Joel Colega", `joel-${tag}@correspondentes.invalid`];
+    const terceiro: [string, string] = ["Terceiro", `terceiro-${tag}@cli.exemplo`];
+    // De terceiro, com o dono e o colega em cópia: não é da conversa com o colega (o caso relatado).
+    await item("c1", "inbox", terceiro, [["Fulano", "fulano@cli.exemplo"]], "2026-11-25T10:00:00Z", false, [eu, jo]);
+    // Do colega, com o dono só em cópia: também não.
+    await item("c2", "inbox", jo, [["Fulano", "fulano@cli.exemplo"]], "2026-11-25T11:00:00Z", false, [eu]);
+    // Do dono para outra pessoa, com o colega em cópia: também não.
+    await item("c3", "sentitems", eu, [["Fulano", "fulano@cli.exemplo"]], "2026-11-25T12:00:00Z", true, [jo]);
+    expect((await resumo()).map((r) => r.address)).not.toContain(jo[1]);
+    // Do colega PARA o dono (com outros no Para): é.
+    await item("c4", "inbox", jo, [eu, ["Fulano", "fulano@cli.exemplo"]], "2026-11-25T13:00:00Z", false);
+    // Do dono PARA o colega: é.
+    await item("c5", "sentitems", eu, [jo], "2026-11-25T14:00:00Z");
+    const doColega = (await resumo()).find((r) => r.address === jo[1]);
+    expect(doColega).toMatchObject({ unread: 1, total: 2, last_subject: "assunto c5" });
+    expect(await resumo()).toEqual(await antiga());
+
+    // A mesma regra que a tela usa na linha do tempo e ao marcar como lido (app.email_da_conversa).
+    const daConversa = (
+      await owner.query(
+        "SELECT graph_id FROM mail_items WHERE owner_person_id = $1 AND graph_id LIKE $2 AND app.email_da_conversa(folder, from_address, to_recipients, $3::text[], $4) ORDER BY graph_id",
+        [dono, `${tag}-c%`, [jo[1]], email.toUpperCase()],
+      )
+    ).rows.map((r) => r.graph_id);
+    expect(daConversa).toEqual([`${tag}-c4`, `${tag}-c5`]);
+  });
 });
+
