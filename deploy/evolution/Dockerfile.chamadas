@@ -26,6 +26,12 @@ RUN node /tmp/omni-lid/patch-lid.mjs \
     && node --check /evolution/dist/main.mjs \
     && node /tmp/omni-lid/lid.test.mjs \
     && rm -r /tmp/omni-lid
+# Por último (os patches acima conferem o hash do main.mjs). Chaves do app state lidas de volta com os bytes certos (sem isso: "bad decrypt" depois de reiniciar).
+COPY patch-chaves-app-state.mjs chaves-app-state.test.mjs /tmp/omni-chaves/
+RUN node /tmp/omni-chaves/patch-chaves-app-state.mjs \
+    && node --check /evolution/dist/main.mjs \
+    && node /tmp/omni-chaves/chaves-app-state.test.mjs \
+    && rm -r /tmp/omni-chaves
 COPY --from=ponte *.mjs /evolution/node_modules/baileys/lib/omni-chamada/
 RUN node /evolution/node_modules/baileys/lib/omni-chamada/patch.mjs \
     && node --check /evolution/node_modules/baileys/lib/Socket/index.js \
@@ -40,6 +46,7 @@ LABEL com.filtrovali.patch-lid="evolution-lid-mapping-1"
 LABEL com.filtrovali.ponte="chamadas-omni-producao-1"
 LABEL com.filtrovali.ponte-acoes="acoes-omni-6"
 LABEL com.filtrovali.patch-cve="baileys-cve-2026-48063-2"
+LABEL com.filtrovali.patch-chaves="app-state-keys-1"
 LABEL com.filtrovali.app="omni"
 # Travas do Omni: chave geral forte e senha do banco; com a ponte ligada, token forte.
 ENTRYPOINT ["/bin/bash", "-c", "if [ ${#AUTHENTICATION_API_KEY} -lt 32 ]; then echo 'AUTHENTICATION_API_KEY ausente ou curta (mínimo 32)'; exit 1; fi; case \"$DATABASE_CONNECTION_URI\" in *evolution:@*) echo 'senha do banco da Evolution ausente'; exit 1;; esac; if [ -n \"$OMNI_CHAMADA_PONTE\" ] && [ ${#OMNI_CHAMADA_TOKEN} -lt 32 ]; then echo 'OMNI_CHAMADA_TOKEN ausente ou curto (mínimo 32)'; exit 1; fi; if [ -n \"$OMNI_ACOES_TOKEN\" ] && [ ${#OMNI_ACOES_TOKEN} -lt 32 ]; then echo 'OMNI_ACOES_TOKEN curto (mínimo 32)'; exit 1; fi; . ./Docker/scripts/deploy_database.sh && npm run start:prod"]

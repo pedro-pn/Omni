@@ -94,7 +94,7 @@ Mensagens de pessoa e de grupo chegaram em tempo real; a foto do grupo abriu pel
 
 ## Ponte de ações do Omni (agenda do celular, adicionar contato, fixar e favoritar)
 
-A Evolution 2.3.7 não expõe em rota o que o WhatsApp Web faz com a agenda e com o fixar/favoritar. A ponte de ações (`experiments/whatsapp-chamada/evolution-bridge/acoes.mjs`, instalada dentro do Baileys da imagem `omni-evolution:2.3.7-chamadas.9`) faz isso pelo próprio socket, só na rede interna, com token:
+A Evolution 2.3.7 não expõe em rota o que o WhatsApp Web faz com a agenda e com o fixar/favoritar. A ponte de ações (`experiments/whatsapp-chamada/evolution-bridge/acoes.mjs`, instalada dentro do Baileys da imagem `omni-evolution:2.3.7-chamadas.10`) faz isso pelo próprio socket, só na rede interna, com token:
 
 - **Agenda:** os contatos **salvos** no celular, com o nome salvo (não o nome de perfil). Na primeira leitura de cada sessão, baixa de novo a coleção dos contatos do WhatsApp (`critical_unblock_low`). O worker lê a cada 6 h (`whatsapp-agenda`, tabela `whatsapp_contacts`, migration 0088). Com a agenda lida, quem não está salvo aparece pelo número e o nome de perfil fica discreto ("~ Nome"), como no WhatsApp Web.
 - **Adicionar contato** (cabeçalho da conversa e menu da mensagem no grupo): salva na agenda do celular, e por ela em todos os aparelhos.
@@ -110,3 +110,7 @@ Ligar (produção):
 ## Segurança: CVE-2026-48063 no Baileys
 
 A Evolution 2.3.7 (e a 2.3.8) usa o Baileys 7.0.0-rc.9, afetado pelo CVE-2026-48063 (GHSA-qvv5-jq5g-4cgg, nota 9,3): qualquer pessoa podia mandar mensagens de protocolo que só o próprio celular deveria mandar, forjar mensagens e histórico e corromper a sincronização do "app state" com chaves falsas. A correção oficial saiu no 7.0.0-rc12, que traz seis meses de mudanças e dependências novas. Por isso a imagem do Omni aplica no rc.9 só a trava da correção (`deploy/evolution/patch-cve-2026-48063.mjs`, do commit 3beb08ee do Baileys), com teste no build (`cve-2026-48063.test.mjs`). Quando a Evolution passar para um Baileys corrigido, o patch recusa o build (o hash do arquivo muda) e deve sair. A trava sozinha descartava também o que vem do próprio celular (troca de chaves do app state e aviso de histórico chegam com `from` = eu e sem `recipient`, e o rc.9/rc12 marcavam como de outra pessoa): o mesmo script aplica o conserto do rc13 (commit 5ddc231f, `decode-wa-message.js`), com teste. Sem ele, número pareado de novo fica sem chaves, sem agenda e sem histórico.
+
+## Chaves do "app state" depois de reiniciar (patch-chaves-app-state)
+
+A Evolution 2.3.7 grava a chave do app state (AppStateSyncKeyData: agenda, fixar, favoritar…) com `JSON.stringify`, que chama o `toJSON` do protobuf: os bytes da chave (`keyData`) viram texto base64. Na leitura, ela recria a chave com `AppStateSyncKeyData.create(...)`, que não decodifica o base64. A chave vira lixo, e toda coleção dá "bad decrypt" depois que a Evolution reinicia. Antes disso funciona, porque a chave certa fica no cache em memória por alguns minutos. A imagem troca `create` por `fromObject`, que decodifica, em `deploy/evolution/patch-chaves-app-state.mjs`, com teste no build e aplicado depois dos patches que conferem o hash do `main.mjs`. A ponte de ações lê a agenda do servidor sem o resync do Baileys, pulando registro que não abre, e aceita a chave nos dois formatos.
