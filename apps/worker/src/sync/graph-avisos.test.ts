@@ -77,7 +77,9 @@ describe.skipIf(!available)("aviso imediato de e-mail novo (assinaturas do Graph
 
   it("assina cada caixa ativa (segredo só como SHA-256), renova perto de vencer, recria a que sumiu e tira a da caixa desligada; o webhook confere o segredo", async () => {
     const f = graphFalso();
-    const agora = new Date("2026-11-24T12:00:00Z");
+    // Relativa a agora: o webhook (app.graph_aviso_email) compara o vencimento com a hora real do banco;
+    // com data fixa, o teste passava a falhar quando a assinatura "vencia" no relógio de verdade.
+    const agora = new Date(Math.floor(Date.now() / 60_000) * 60_000);
     const r1 = await manterAssinaturas(db(), f.g, URL_AVISOS, () => agora);
     expect(r1).toMatchObject({ criadas: 2, erros: 1 }); // a caixa negada fica para a próxima rodada
     const linhas = (await owner.query("SELECT s.id, b.email, s.secret_sha256, s.expires_at FROM graph_subscriptions s JOIN mail_mailboxes b ON b.id = s.mailbox_id ORDER BY b.email")).rows;
