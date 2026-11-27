@@ -28,4 +28,28 @@ describe("leitura da agenda", () => {
     expect(r).toMatchObject({ parciais: 1, contatos: 1 });
     expect(chamadas).toEqual(["acrescentar"]);
   });
+
+  it("completa, mas bem menor que a guardada: só acrescenta; do tamanho certo, troca a agenda inteira", async () => {
+    const rodar = async (guardados: number, novos: number) => {
+      const chamadas: string[] = [];
+      let selects = 0;
+      const db = {
+        select: () => ({
+          from: () => ({ where: async () => (selects++ === 0 ? [{ id: "n1", telefone: "5547900000001" }] : [{ n: guardados }]) }),
+        }),
+        execute: async () => (chamadas.push("trocar-tudo"), { rows: [{ n: novos }] }),
+        insert: () => ({ values: () => ({ onConflictDoUpdate: async () => chamadas.push("acrescentar") }) }),
+      } as unknown as Parameters<typeof lerAgendas>[0];
+      const contatos = Array.from({ length: novos }, (_, i) => ({ jid: `55479000${String(i).padStart(5, "0")}@s.whatsapp.net`, lid: null, telefone: null, nome: `C${i}` }));
+      const r = await lerAgendas(db, { contatos: async () => ({ contatos, completa: true, diagnostico: null, mensagens: [] }) });
+      return { r, chamadas };
+    };
+    const encolheu = await rodar(388, 159);
+    expect(encolheu.r).toMatchObject({ encolhidas: 1, contatos: 159 });
+    expect(encolheu.chamadas.every((c) => c === "acrescentar")).toBe(true);
+    const normal = await rodar(160, 159);
+    expect(normal.r).toMatchObject({ encolhidas: 0, contatos: 159 });
+    expect(normal.chamadas).toEqual(["trocar-tudo"]);
+  });
 });
+

@@ -37,7 +37,7 @@ LABEL com.filtrovali.patch="baileys-partial-credential-presence-1"
 LABEL com.filtrovali.patch-contatos="evolution-contact-names-1"
 LABEL com.filtrovali.patch-lid="evolution-lid-mapping-1"
 LABEL com.filtrovali.ponte="chamadas-omni-producao-1"
-LABEL com.filtrovali.ponte-acoes="acoes-omni-4"
+LABEL com.filtrovali.ponte-acoes="acoes-omni-5"
 LABEL com.filtrovali.patch-cve="baileys-cve-2026-48063-2"
 LABEL com.filtrovali.app="omni"
 # Travas do Omni: chave geral forte e senha do banco; com a ponte ligada, token forte.
