@@ -13,43 +13,33 @@ const MAX_CORPO = 64 * 1024;
 const digitos = (s) => String(s ?? '').replace(/\D/g, '');
 const SETE_DIAS = 7 * 24 * 3600;
 
-/** Durante a leitura, copia as mensagens de sincronização do log do Baileys (só o texto e a primeira linha do erro). */
-function escutarLog(logger, destino) {
-  if (!logger) return () => {};
-  const originais = {};
-  for (const nivel of ['info', 'warn', 'error', 'debug']) {
-    if (typeof logger[nivel] !== 'function') continue;
-    originais[nivel] = logger[nivel];
-    logger[nivel] = function (obj, msg) {
-      try {
-        const texto = typeof obj === 'string' ? obj : String(msg ?? '');
-        if (/sync|snapshot|app.?state|patch|key/i.test(texto) && destino.length < 20) {
-          const erro = obj && typeof obj === 'object' ? String(obj.error ?? obj.err?.stack ?? obj.err?.message ?? '').split('\n')[0] : '';
-          destino.push(`${nivel}: ${texto.slice(0, 160)}${erro ? ` — ${erro.slice(0, 200)}` : ''}`);
-        }
-      } catch {}
-      return originais[nivel].apply(this, arguments);
-    };
-  }
-  return () => Object.assign(logger, originais);
+// Coleção do app state com os contatos salvos (contactAction), e as das ações que a ponte altera.
+const COLECAO_CONTATOS = 'critical_unblock_low';
+const OP_REMOVE = 1;
+const versaoNum = (v) => Number(v?.toString?.() ?? v ?? 0) || 0;
+
+/** Peças do Baileys da imagem (lib/omni-chamada/acoes.mjs → lib/Utils, WAProto). Nos testes, injetadas. */
+async function baileysDaImagem() {
+  const [u, w] = await Promise.all([import('../Utils/index.js'), import('../../WAProto/index.js')]);
+  return { extractSyncdPatches: u.extractSyncdPatches, downloadExternalPatch: u.downloadExternalPatch, aesDecrypt: u.aesDecrypt, hkdf: u.hkdf, proto: w.proto };
 }
 
 export class PonteDeAcoes {
-  constructor({ token, port = 8099, host = '127.0.0.1', hostname = '127.0.0.1', escutar = true, esperaDoBuffer = 500 }) {
+  constructor({ token, port = 8099, host = '127.0.0.1', hostname = '127.0.0.1', escutar = true, baileys = null }) {
     if (typeof token !== 'string' || token.length < 32 || !Number.isInteger(port) || port < 1024 || port > 65535 ||
         !['127.0.0.1', '0.0.0.0'].includes(host) || !/^[a-z0-9][a-z0-9.-]{0,62}$/.test(hostname)) throw new Error('invalid_acoes_config');
     this.token = token;
     this.esperado = `${hostname}:${port}`;
-    this.linhas = new Map(); // ws -> { sock, contatos: Map<jid, contato>, sincronizado }
-    this.esperaDoBuffer = esperaDoBuffer;
+    this.linhas = new Map(); // ws -> { sock, contatos (do histórico): Map<jid, contato> }
+    this.baileys = baileys ? async () => baileys : baileysDaImagem;
     if (escutar) {
       this.http = createServer((req, res) => void this.atender(req, res));
       this.http.listen(port, host);
     }
   }
 
-  attach(sock, logger = null) {
-    const linha = { sock, logger, contatos: new Map(), sincronizado: false, eventos: 0, comNome: 0, historico: false };
+  attach(sock) {
+    const linha = { sock, contatos: new Map(), eventos: 0, comNome: 0, historico: false };
     this.linhas.set(sock.ws, linha);
     // Só o que vem da agenda (contactAction e o histórico) traz `name`; o nome de perfil vem em `notify`.
     // Apagar só pela agenda (contacts.upsert vem do contactAction da coleção dos contatos): o
@@ -88,40 +78,112 @@ export class PonteDeAcoes {
   }
 
   /**
-   * A agenda inteira: na primeira vez, baixa de novo a coleção dos contatos (snapshot). O
-   * diagnóstico diz quantos contatos o WhatsApp mandou e se a coleção baixou (versão > 0); o
-   * Baileys não devolve erro quando a coleção falha (só registra no log).
+   * A agenda inteira, lida do servidor do WhatsApp SEM mexer no estado de sincronização do Baileys:
+   * baixa a coleção dos contatos (snapshot e as alterações depois dele) e abre registro por
+   * registro, pulando o que não abre. O resync do Baileys aborta a coleção inteira por um único
+   * registro que não decifra ("bad decrypt" — registros estragados ficam no servidor e voltam a
+   * cada pareamento; corrigido só no Baileys rc10, #2456) e, ao falhar, zera o estado local.
    */
-  async contatos(linha, recarregar = false) {
-    const antes = { eventos: linha.eventos, comNome: linha.comNome };
-    let versao = null;
-    const mensagens = [];
-    if (!linha.sincronizado || recarregar) {
-      // O Baileys não devolve erro quando a coleção falha: só registra no log (que pode estar
-      // desligado). Durante a leitura, guarda as mensagens de sincronização (sem os dados).
-      const desfazer = escutarLog(linha.logger, mensagens);
-      try {
-        await linha.sock.authState.keys.set({ 'app-state-sync-version': { critical_unblock_low: null } });
-        await linha.sock.resyncAppState(['critical_unblock_low'], true);
-      } finally {
-        desfazer();
+  async lerAgendaDoServidor(linha) {
+    const B = await this.baileys();
+    const chaves = new Map();
+    const chaveDe = async (idBytes) => {
+      const id = Buffer.from(idBytes).toString('base64');
+      if (!chaves.has(id)) {
+        const k = (await linha.sock.authState.keys.get('app-state-sync-key', [id]))?.[id];
+        // As chaves da mutação (mesma derivação do Baileys: HKDF de 160 bytes).
+        const e = k?.keyData ? Buffer.from(await B.hkdf(Buffer.from(k.keyData), 160, { info: 'WhatsApp Mutation Keys' })) : null;
+        chaves.set(id, e ? { valueEncryptionKey: e.subarray(32, 64) } : null);
       }
-      // O Baileys segura os eventos da coleção num buffer e só os solta ~100 ms depois do resync:
-      // sem esperar, a primeira leitura voltava sem os contatos que acabaram de chegar.
-      await new Promise((ok) => setTimeout(ok, this.esperaDoBuffer));
-      if (linha.sock.ev.isBuffering?.()) linha.sock.ev.flush?.();
-      const v = await linha.sock.authState.keys.get('app-state-sync-version', ['critical_unblock_low']);
-      versao = v?.critical_unblock_low?.version ?? 0;
-      linha.sincronizado = versao > 0;
-      if (versao > 0) linha.colecaoBaixada = true;
+      return chaves.get(id);
+    };
+    const contatos = new Map();
+    const d = { registros: 0, ignorados: 0, semChave: 0 };
+    const aplicar = async (operacao, record) => {
+      d.registros += 1;
+      try {
+        const k = await chaveDe(record.keyId.id);
+        if (!k) {
+          d.semChave += 1;
+          return;
+        }
+        const blob = Buffer.from(record.value.blob);
+        const acao = B.proto.SyncActionData.decode(B.aesDecrypt(blob.subarray(0, -32), k.valueEncryptionKey));
+        const indice = JSON.parse(Buffer.from(acao.index).toString());
+        if (indice[0] !== 'contact' || typeof indice[1] !== 'string') return;
+        const jid = indice[1];
+        const c = acao.value?.contactAction;
+        const nome = String(c?.fullName || c?.firstName || '').trim().slice(0, 120);
+        if (operacao !== OP_REMOVE && nome && PESSOA.test(jid) && digitos(nome) !== digitos(jid.split('@')[0])) {
+          contatos.set(jid, { jid, lid: c.lidJid || (jid.endsWith('@lid') ? jid : null), telefone: c.pnJid || (jid.endsWith('@s.whatsapp.net') ? jid : null), nome });
+        } else contatos.delete(jid);
+      } catch {
+        d.ignorados += 1; // registro que não abre: pula, os outros valem
+      }
+    };
+    let versao = 0;
+    for (let volta = 0; volta < 30; volta += 1) {
+      const resposta = await linha.sock.query({
+        tag: 'iq',
+        attrs: { to: 's.whatsapp.net', xmlns: 'w:sync:app:state', type: 'set' },
+        content: [{ tag: 'sync', attrs: {}, content: [{ tag: 'collection', attrs: { name: COLECAO_CONTATOS, version: String(versao), return_snapshot: String(versao === 0) } }] }],
+      });
+      const col = (await B.extractSyncdPatches(resposta, {}))[COLECAO_CONTATOS];
+      if (!col) break;
+      if (col.snapshot) {
+        for (const rec of col.snapshot.records ?? []) await aplicar(0, rec);
+        versao = versaoNum(col.snapshot.version?.version) || versao;
+      }
+      for (const p of col.patches ?? []) {
+        const mutacoes = [...(p.mutations ?? [])];
+        if (p.externalMutations) mutacoes.push(...((await B.downloadExternalPatch(p.externalMutations, {})).mutations ?? []));
+        for (const m of mutacoes) await aplicar(m.operation ?? 0, m.record);
+        versao = versaoNum(p.version?.version) || versao;
+      }
+      if (!col.hasMorePatches) break;
     }
+    return { contatos, diagnostico: { ...d, versao } };
+  }
+
+  /** A agenda: a do servidor e, por cima do que ela não tem, o que o histórico do pareamento trouxe. */
+  async contatos(linha) {
+    const eventosAntes = linha.eventos;
+    const mensagens = [];
+    let lida = null;
+    try {
+      lida = await this.lerAgendaDoServidor(linha);
+    } catch (e) {
+      mensagens.push(`leitura: ${String(e?.message ?? e).split('\n')[0].slice(0, 200)}`);
+    }
+    const todos = new Map(linha.contatos);
+    if (lida) for (const [jid, c] of lida.contatos) todos.set(jid, c);
     return {
-      contatos: [...linha.contatos.values()],
-      // Completa: a coleção dos contatos baixou ou o histórico do pareamento chegou nesta sessão.
-      completa: Boolean(linha.colecaoBaixada || linha.historico),
-      diagnostico: { versaoDaColecao: versao, eventosNaLeitura: linha.eventos - antes.eventos, comNomeNaLeitura: linha.comNome - antes.comNome, eventosDesdeOInicio: linha.eventos, salvosEmMemoria: linha.contatos.size },
+      contatos: [...todos.values()],
+      completa: Boolean(lida) || linha.historico,
+      diagnostico: {
+        versaoDaColecao: lida?.diagnostico.versao ?? null,
+        registros: lida?.diagnostico.registros ?? null,
+        ignorados: lida?.diagnostico.ignorados ?? null,
+        semChave: lida?.diagnostico.semChave ?? null,
+        doServidor: lida?.contatos.size ?? null,
+        doHistorico: linha.contatos.size,
+        eventosNaLeitura: linha.eventos - eventosAntes,
+      },
       mensagens,
     };
+  }
+
+  /**
+   * Antes de alterar o app state (contato, fixar, favoritar): a coleção precisa estar sincronizada.
+   * Com o estado zerado (sincronização falhou), o Baileys manda a alteração na versão 0 — o que
+   * pode corromper os dados no servidor do WhatsApp (Baileys #2456). Recusa em vez de arriscar.
+   */
+  async exigirSincronizada(linha, colecao) {
+    try {
+      await linha.sock.resyncAppState([colecao], false);
+    } catch {}
+    const v = (await linha.sock.authState.keys.get('app-state-sync-version', [colecao]))?.[colecao];
+    if (!(versaoNum(v?.version) > 0)) throw Object.assign(new Error('colecao_fora_de_sincronia'), { status: 409 });
   }
 
   async executar(corpo) {
@@ -129,21 +191,24 @@ export class PonteDeAcoes {
     const jid = String(corpo?.jid ?? '');
     switch (corpo?.acao) {
       case 'contatos':
-        return await this.contatos(l, corpo.recarregar === true);
+        return await this.contatos(l);
       case 'contato': {
         const nome = String(corpo.nome ?? '').trim().slice(0, 120);
         if (!PESSOA.test(jid) || !nome) throw Object.assign(new Error('dados_invalidos'), { status: 400 });
         const primeiro = String(corpo.primeiroNome ?? nome.split(/\s+/)[0]).trim().slice(0, 60);
+        await this.exigirSincronizada(l, COLECAO_CONTATOS);
         await l.sock.addOrEditContact(jid, { fullName: nome, firstName: primeiro, saveOnPrimaryAddressbook: true, ...(jid.endsWith('@s.whatsapp.net') ? { pnJid: jid } : { lidJid: jid }) });
         l.contatos.set(jid, { jid, lid: jid.endsWith('@lid') ? jid : null, telefone: jid.endsWith('@s.whatsapp.net') ? jid : null, nome });
         return { ok: true };
       }
       case 'fixar-conversa':
         if (!PESSOA.test(jid) && !GRUPO.test(jid)) throw Object.assign(new Error('dados_invalidos'), { status: 400 });
+        await this.exigirSincronizada(l, 'regular_low');
         await l.sock.chatModify({ pin: corpo.fixar === true }, jid);
         return { ok: true };
       case 'favoritar':
         if ((!PESSOA.test(jid) && !GRUPO.test(jid)) || !ID.test(String(corpo.id ?? ''))) throw Object.assign(new Error('dados_invalidos'), { status: 400 });
+        await this.exigirSincronizada(l, 'regular_low');
         await l.sock.chatModify({ star: { messages: [{ id: corpo.id, fromMe: corpo.fromMe === true }], star: corpo.favorita === true } }, jid);
         return { ok: true };
       case 'lids': {

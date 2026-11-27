@@ -490,7 +490,7 @@ function DialogoContato({ numberId, telefone, sugestao, fechar, aoSalvar }: { nu
     mutationFn: () => salvarContatoWhatsApp({ data: { numberId, telefone, nome } }),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ["whatsapp"] });
-      aoSalvar(r.noCelular ? "Contato salvo na agenda do celular." : "Contato salvo no Omni (não foi para a agenda do celular neste ambiente).");
+      aoSalvar(r.noCelular ? "Contato salvo na agenda do celular." : (r.aviso ?? "Contato salvo no Omni (não foi para a agenda do celular neste ambiente)."));
       fechar();
     },
   });
