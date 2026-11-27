@@ -26,6 +26,12 @@ RUN node /tmp/omni-lid/patch-lid.mjs \
     && node --check /evolution/dist/main.mjs \
     && node /tmp/omni-lid/lid.test.mjs \
     && rm -r /tmp/omni-lid
+# Por último (os patches acima conferem o hash do main.mjs). Chaves do app state lidas de volta com os bytes certos (sem isso: "bad decrypt" depois de reiniciar).
+COPY patch-chaves-app-state.mjs chaves-app-state.test.mjs /tmp/omni-chaves/
+RUN node /tmp/omni-chaves/patch-chaves-app-state.mjs \
+    && node --check /evolution/dist/main.mjs \
+    && node /tmp/omni-chaves/chaves-app-state.test.mjs \
+    && rm -r /tmp/omni-chaves
 LABEL com.filtrovali.patch="baileys-partial-credential-presence-1"
 LABEL com.filtrovali.patch-contatos="evolution-contact-names-1"
 LABEL com.filtrovali.patch-lid="evolution-lid-mapping-1"

@@ -23,6 +23,11 @@ p.attach(sock);
 const r = await p.executar({ telefone: '5547900000001', acao: 'contatos' });
 assert.deepEqual(r.contatos.map((c) => c.nome).sort(), ['Ana Campo', 'Bia Obra']);
 assert.equal(r.diagnostico.ignorados, 1);
+// Chave como a Evolution 2.3.7 grava (keyData em texto base64, sem o patch da imagem): também abre.
+const sockTexto = { ...sock, authState: { ...sock.authState, keys: { get: async (t, ids) => Object.fromEntries(ids.map((i) => [i, t === 'app-state-sync-key' && i === keyId ? { keyData: keyData.toString('base64') } : undefined])) } } };
+const p3 = new PonteDeAcoes({ token: 'x'.repeat(40), escutar: false, baileys: B });
+p3.attach(sockTexto);
+assert.equal((await p3.executar({ telefone: '5547900000001', acao: 'contatos' })).contatos.length, 2);
 // E o carregamento padrão (sem injeção) acha as peças do Baileys da imagem.
 const p2 = new PonteDeAcoes({ token: 'x'.repeat(40), escutar: false });
 const pecas = await p2.baileys();

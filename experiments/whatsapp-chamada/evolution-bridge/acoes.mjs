@@ -92,7 +92,10 @@ export class PonteDeAcoes {
       if (!chaves.has(id)) {
         const k = (await linha.sock.authState.keys.get('app-state-sync-key', [id]))?.[id];
         // As chaves da mutação (mesma derivação do Baileys: HKDF de 160 bytes).
-        const e = k?.keyData ? Buffer.from(await B.hkdf(Buffer.from(k.keyData), 160, { info: 'WhatsApp Mutation Keys' })) : null;
+        // A Evolution 2.3.7 grava keyData como texto base64 (toJSON do protobuf); com o patch da imagem
+        // volta como bytes. Aceita os dois.
+        const bytes = typeof k?.keyData === 'string' ? Buffer.from(k.keyData, 'base64') : k?.keyData ? Buffer.from(k.keyData) : null;
+        const e = bytes?.length ? Buffer.from(await B.hkdf(bytes, 160, { info: 'WhatsApp Mutation Keys' })) : null;
         chaves.set(id, e ? { valueEncryptionKey: e.subarray(32, 64) } : null);
       }
       return chaves.get(id);
