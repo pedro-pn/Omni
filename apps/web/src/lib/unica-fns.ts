@@ -5,6 +5,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { daConversa } from "../server/email-conversa.ts";
 import { getPool } from "../server/db.ts";
 import { personIdFromRequest } from "../server/session.ts";
 import { ErroParaTela } from "./erros.ts";
@@ -89,17 +90,22 @@ export type EmailDoContato = {
   anexos: boolean;
 };
 
-/** Cabeçalhos dos e-mails da própria caixa com estes endereços (linha do tempo do contato). */
+/**
+ * Cabeçalhos dos e-mails da própria caixa trocados com estes endereços (linha do tempo do contato):
+ * só os que a pessoa mandou para mim (eu no Para) e os que eu mandei para ela (ela no Para). Cópia
+ * não conta — e-mail de terceiro com os dois em cópia não é da conversa entre eles (0092).
+ */
 export const emailsDoContato = createServerFn({ method: "POST" })
   .validator(z.object({ enderecos: z.array(z.string().max(254)).min(1).max(20) }))
   .handler(async ({ data }): Promise<EmailDoContato[]> => {
     const personId = await pessoa();
     const enderecos = data.enderecos.map((e) => e.toLowerCase());
+    const lista = `{${enderecos.map((e) => `"${e.replace(/["\\]/g, "")}"`).join(",")}}`;
     const linhas = await withPerson(getPool(), personId, (db) =>
       db
         .select()
         .from(schema.mailItems)
-        .where(sql`${schema.mailItems.addresses} && ${`{${enderecos.map((e) => `"${e.replace(/["\\]/g, "")}"`).join(",")}}`}::text[]`)
+        .where(and(sql`${schema.mailItems.addresses} && ${lista}::text[]`, daConversa(lista)))
         .orderBy(sql`coalesce(${schema.mailItems.receivedAt}, ${schema.mailItems.sentAt}) DESC`)
         .limit(200),
     );

@@ -6,6 +6,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { daConversa } from "../server/email-conversa.ts";
 import { getPool } from "../server/db.ts";
 import { imagensEmbutidas, nomeEEndereco } from "../server/email-graph.ts";
 import { limparHtmlEmail, politicaDoQuadro } from "../server/email-html.ts";
@@ -215,6 +216,8 @@ export const marcarEmailsDoContato = createServerFn({ method: "POST" })
             eq(schema.mailItems.ownerPersonId, personId),
             eq(schema.mailItems.folder, "inbox"),
             sql`${schema.mailItems.addresses} && ${lista}::text[]`,
+            // Só os que a pessoa mandou para mim (eu no Para): cópia não é da conversa (0092).
+            daConversa(lista),
             data.lido ? eq(schema.mailItems.isRead, false) : sql`true`,
           ),
         )
